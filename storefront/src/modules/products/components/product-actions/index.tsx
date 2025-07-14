@@ -11,8 +11,12 @@ import OptionSelect from "@modules/products/components/product-actions/option-se
 
 import MobileActions from "./mobile-actions"
 import ProductPrice from "../product-price"
-import { addToCart } from "@lib/data/cart"
+import { addToCart, addStickerToCart } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
+import { isStickerVariant, STICKER_MOQ } from "@lib/util/sticker-utils"
+import { useStickerPricing } from "@lib/hooks/use-sticker-pricing"
+import StickerPricingDisplay from "../sticker-pricing"
+import StickerQuantitySelector from "../sticker-pricing/quantity-selector"
 
 type ProductActionsProps = {
   product: HttpTypes.StoreProduct
@@ -36,6 +40,7 @@ export default function ProductActions({
 }: ProductActionsProps) {
   const [options, setOptions] = useState<Record<string, string | undefined>>({})
   const [isAdding, setIsAdding] = useState(false)
+  const [stickerQuantity, setStickerQuantity] = useState<number>(STICKER_MOQ)
   const countryCode = useParams().countryCode as string
 
   // If there is only 1 variant, preselect the options
@@ -56,6 +61,20 @@ export default function ProductActions({
       return isEqual(variantOptions, options)
     })
   }, [product.variants, options])
+
+  // Check if this is a sticker variant
+  const isSticker = selectedVariant ? isStickerVariant(selectedVariant.id) : false
+
+  // Use sticker pricing hook for stickers
+  const {
+    pricing: stickerPricing,
+    loading: pricingLoading,
+    error: pricingError,
+  } = useStickerPricing({
+    variantId: selectedVariant?.id,
+    quantity: stickerQuantity,
+    enabled: isSticker,
+  })
 
   // update the options when a variant is selected
   const setOptionValue = (title: string, value: string) => {
@@ -99,11 +118,23 @@ export default function ProductActions({
 
     setIsAdding(true)
 
-    await addToCart({
-      variantId: selectedVariant.id,
-      quantity: 1,
-      countryCode,
-    })
+    try {
+      if (isSticker) {
+        await addStickerToCart({
+          variantId: selectedVariant.id,
+          quantity: stickerQuantity,
+          countryCode,
+        })
+      } else {
+        await addToCart({
+          variantId: selectedVariant.id,
+          quantity: 1,
+          countryCode,
+        })
+      }
+    } catch (error) {
+      console.error("Error adding to cart:", error)
+    }
 
     setIsAdding(false)
   }
@@ -133,11 +164,51 @@ export default function ProductActions({
           )}
         </div>
 
-        <ProductPrice product={product} variant={selectedVariant} />
+        {/* Conditional content based on sticker vs regular product */}
+        {isSticker ? (
+          <div className="space-y-4">
+            {/* Sticker Quantity Selector */}
+            <StickerQuantitySelector
+              quantity={stickerQuantity}
+              onQuantityChange={setStickerQuantity}
+              disabled={!!disabled || isAdding}
+            />
+
+            {/* Sticker Pricing Display */}
+            {pricingError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                <div className="text-sm text-red-600">
+                  ⚠ {pricingError}
+                </div>
+              </div>
+            )}
+
+            {stickerPricing && !pricingError && (
+              <StickerPricingDisplay
+                pricing={stickerPricing}
+                loading={pricingLoading}
+              />
+            )}
+
+            {pricingLoading && (
+              <div className="text-sm text-ui-fg-subtle">
+                Calculating pricing...
+              </div>
+            )}
+          </div>
+        ) : (
+          <ProductPrice product={product} variant={selectedVariant} />
+        )}
 
         <Button
           onClick={handleAddToCart}
-          disabled={!inStock || !selectedVariant || !!disabled || isAdding}
+          disabled={
+            !inStock ||
+            !selectedVariant ||
+            !!disabled ||
+            isAdding ||
+            (isSticker && (pricingLoading || !!pricingError || !stickerPricing))
+          }
           variant="primary"
           className="w-full h-10"
           isLoading={isAdding}
@@ -147,6 +218,10 @@ export default function ProductActions({
             ? "Select variant"
             : !inStock
             ? "Out of stock"
+            : isSticker
+            ? stickerPricing
+              ? `Add ${stickerQuantity.toLocaleString()} sticker${stickerQuantity > 1 ? 's' : ''} to cart - €${stickerPricing.totalPrice.toFixed(2)}`
+              : "Configure your stickers"
             : "Add to cart"}
         </Button>
         <MobileActions

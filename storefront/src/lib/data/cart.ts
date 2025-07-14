@@ -396,3 +396,41 @@ export async function updateRegion(countryCode: string, currentPath: string) {
 
   redirect(`/${countryCode}${currentPath}`)
 }
+
+/**
+ * Add sticker to cart with custom pricing
+ */
+export async function addStickerToCart({
+  variantId,
+  quantity,
+  countryCode,
+}: {
+  variantId: string
+  quantity: number
+  countryCode: string
+}) {
+  const cart = await getOrSetCart(countryCode)
+
+  if (!cart) {
+    throw new Error("Error retrieving or creating cart")
+  }
+
+  const headers = await getAuthHeaders()
+
+  await sdk.client
+    .fetch(`/store/carts/${cart.id}/stickers`, {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: {
+        variant_id: variantId,
+        quantity,
+      },
+    })
+    .then(() => {
+      revalidateTag("cart")
+    })
+    .catch(medusaError)
+}

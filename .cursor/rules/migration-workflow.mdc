@@ -1,0 +1,87 @@
+# Migration Workflow Guide
+
+## Migration Priority Order
+
+### Phase 1: Backend Core (CRITICAL)
+1. **Pricing Calculator Module**
+   - Copy [medusa4/my-sticker-store/src/modules/sticker-pricing/pricing-calculator.ts](mdc:medusa4/my-sticker-store/src/modules/sticker-pricing/pricing-calculator.ts) to [backend/src/modules/sticker-pricing/pricing-calculator.ts](mdc:backend/src/modules/sticker-pricing/pricing-calculator.ts)
+   - Ensure all tier calculations work correctly
+
+2. **Data Models**
+   - Copy [medusa4/my-sticker-store/src/modules/sticker-pricing/models/sticker-config.ts](mdc:medusa4/my-sticker-store/src/modules/sticker-pricing/models/sticker-config.ts) to [backend/src/modules/sticker-pricing/models/sticker-config.ts](mdc:backend/src/modules/sticker-pricing/models/sticker-config.ts)
+   - Update model definitions for latest Medusa framework
+
+3. **Service Implementation**
+   - Copy [medusa4/my-sticker-store/src/modules/sticker-pricing/service.ts](mdc:medusa4/my-sticker-store/src/modules/sticker-pricing/service.ts) to [backend/src/modules/sticker-pricing/service.ts](mdc:backend/src/modules/sticker-pricing/service.ts)
+   - Update service to use new MedusaService pattern
+
+4. **Module Registration**
+   - Create [backend/src/modules/sticker-pricing/index.ts](mdc:backend/src/modules/sticker-pricing/index.ts)
+   - Add module to [backend/medusa-config.js](mdc:backend/medusa-config.js)
+
+### Phase 2: Workflows (HIGH)
+1. **Sticker Pricing Workflow**
+   - Copy [medusa4/my-sticker-store/src/workflows/sticker-pricing/calculate-sticker-pricing.ts](mdc:medusa4/my-sticker-store/src/workflows/sticker-pricing/calculate-sticker-pricing.ts) to [backend/src/workflows/sticker-pricing/calculate-sticker-pricing.ts](mdc:backend/src/workflows/sticker-pricing/calculate-sticker-pricing.ts)
+
+2. **Cart Integration Workflow**
+   - Copy [medusa4/my-sticker-store/src/workflows/add-sticker-to-cart.ts](mdc:medusa4/my-sticker-store/src/workflows/add-sticker-to-cart.ts) to [backend/src/workflows/add-sticker-to-cart.ts](mdc:backend/src/workflows/add-sticker-to-cart.ts)
+
+### Phase 3: API Routes (MEDIUM)
+1. **Store API Routes**
+   - Create [backend/src/api/store/stickers/](mdc:backend/src/api/store/stickers/) directory
+   - Implement pricing calculation endpoints
+   - Add cart sticker update endpoints
+
+2. **Admin API Routes** (if needed)
+   - Create [backend/src/api/admin/stickers/](mdc:backend/src/api/admin/stickers/) directory
+   - Implement configuration management endpoints
+
+### Phase 4: Frontend Integration (MEDIUM)
+1. **Product Page Integration**
+   - Update [storefront/src/modules/products/](mdc:storefront/src/modules/products/) components
+   - Add sticker pricing display
+   - Reference [medusa4/my-sticker-store-storefront/src/modules/products/](mdc:medusa4/my-sticker-store-storefront/src/modules/products/)
+
+2. **Cart Page Integration**
+   - Update [storefront/src/modules/cart/](mdc:storefront/src/modules/cart/) components
+   - Add sticker pricing updates
+   - Reference [medusa4/my-sticker-store-storefront/src/modules/cart/](mdc:medusa4/my-sticker-store-storefront/src/modules/cart/)
+
+### Phase 5: Testing (LOW)
+1. **Backend Tests**
+   - Copy [medusa4/my-sticker-store/tests/sticker-pricing.test.ts](mdc:medusa4/my-sticker-store/tests/sticker-pricing.test.ts) to [backend/tests/sticker-pricing.test.ts](mdc:backend/tests/sticker-pricing.test.ts)
+   - Update test configuration
+
+2. **Frontend Tests**
+   - Add component tests for sticker pricing
+   - Add E2E tests for cart workflow
+
+## Migration Verification Steps
+
+### After Each Phase
+1. Run `pnpm build` to ensure no compilation errors
+2. Run `pnpm dev` to test locally
+3. Verify database migrations work correctly
+4. Test API endpoints with proper responses
+5. Verify frontend components render correctly
+
+### Key Migration Checkpoints
+- [ ] Pricing calculator works with all tier calculations
+- [ ] Module is properly registered in Medusa config
+- [ ] Database models are created and migrated
+- [ ] API routes return correct pricing data
+- [ ] Frontend displays dynamic pricing correctly
+- [ ] Cart updates pricing when quantities change
+- [ ] All tests pass
+
+## Common Migration Issues
+- **Import path updates**: Update from `@medusajs/medusa` to `@medusajs/framework/*`
+- **Service pattern changes**: Update to new MedusaService pattern
+- **Model definition updates**: Update model syntax for latest framework
+- **Workflow updates**: Ensure workflow steps use correct container resolution
+- **API route updates**: Update to new request/response patterns
+
+## Reference Documentation
+- [medusa4/STICKER_IMPLEMENTATION_PLAN.md](mdc:medusa4/STICKER_IMPLEMENTATION_PLAN.md) - Complete implementation guide
+- [backend/src/modules/README.md](mdc:backend/src/modules/README.md) - Module creation guide
+- [medusa4/markdown_results/](mdc:medusa4/markdown_results/) - Medusa v2 documentation

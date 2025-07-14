@@ -1,53 +1,96 @@
 import { getPricesForVariant } from "@lib/util/get-product-price"
 import { HttpTypes } from "@medusajs/types"
 import { clx } from "@medusajs/ui"
+import { convertToLocale } from "@lib/util/money"
 
 type LineItemUnitPriceProps = {
   item: HttpTypes.StoreCartLineItem | HttpTypes.StoreOrderLineItem
   style?: "default" | "tight"
+  currencyCode?: string
 }
 
 const LineItemUnitPrice = ({
   item,
   style = "default",
+  currencyCode
 }: LineItemUnitPriceProps) => {
-  const {
-    original_price,
-    calculated_price,
-    original_price_number,
-    calculated_price_number,
-    percentage_diff,
-  } = getPricesForVariant(item.variant) ?? {}
-  const hasReducedPrice = calculated_price_number < original_price_number
+  // For cart/order items, use the actual unit_price from the item
+  const hasItemPrice = 'unit_price' in item && item.unit_price !== null
+  
+  if (hasItemPrice) {
+    const currency_code = currencyCode || 'EUR'
+    
+    return (
+      <div
+        className={clx("flex flex-col text-left", {
+          "gap-y-2": style === "default",
+        })}
+      >
+        <span
+          className={clx("text-ui-fg-base", {
+            "txt-compact-small": style === "tight",
+          })}
+          data-testid="product-unit-price"
+        >
+          {convertToLocale({
+            amount: item.unit_price,
+            currency_code,
+          })}
+        </span>
+      </div>
+    )
+  }
+  
+  // Fallback to variant pricing
+  const { currency_code, calculated_price_number, original_price_number } =
+    getPricesForVariant(item.variant) ?? {}
+
+  const hasReducedPrice = calculated_price_number && original_price_number && 
+    calculated_price_number < original_price_number && style === "default"
 
   return (
-    <div className="flex flex-col text-ui-fg-muted justify-center h-full">
+    <div
+      className={clx("flex flex-col text-left", {
+        "gap-y-2": style === "default",
+      })}
+    >
       {hasReducedPrice && (
         <>
-          <p>
-            {style === "default" && (
-              <span className="text-ui-fg-muted">Original: </span>
-            )}
-            <span
-              className="line-through"
-              data-testid="product-unit-original-price"
-            >
-              {original_price}
-            </span>
-          </p>
-          {style === "default" && (
-            <span className="text-ui-fg-interactive">-{percentage_diff}%</span>
-          )}
+          <span
+            className="line-through text-ui-fg-muted"
+            data-testid="product-original-price"
+          >
+            {convertToLocale({
+              amount: original_price_number,
+              currency_code,
+            })}
+          </span>
+          <span
+            className={clx("text-ui-fg-interactive", {
+              "txt-compact-small": style === "tight",
+            })}
+          >
+            {convertToLocale({
+              amount: calculated_price_number,
+              currency_code,
+            })}
+          </span>
         </>
       )}
-      <span
-        className={clx("text-base-regular", {
-          "text-ui-fg-interactive": hasReducedPrice,
-        })}
-        data-testid="product-unit-price"
-      >
-        {calculated_price}
-      </span>
+
+      {!hasReducedPrice && (
+        <span
+          className={clx("text-ui-fg-base", {
+            "txt-compact-small": style === "tight",
+          })}
+          data-testid="product-unit-price"
+        >
+          {convertToLocale({
+            amount: calculated_price_number,
+            currency_code,
+          })}
+        </span>
+      )}
     </div>
   )
 }

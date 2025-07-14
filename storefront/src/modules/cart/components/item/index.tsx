@@ -1,7 +1,6 @@
 "use client"
 
 import { Table, Text, clx } from "@medusajs/ui"
-
 import { updateLineItem } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
 import CartItemSelect from "@modules/cart/components/cart-item-select"
@@ -14,23 +13,26 @@ import LocalizedClientLink from "@modules/common/components/localized-client-lin
 import Spinner from "@modules/common/icons/spinner"
 import Thumbnail from "@modules/products/components/thumbnail"
 import { useState } from "react"
+import { isStickerVariant } from "@lib/util/sticker-utils"
+import { convertToLocale } from "@lib/util/money"
 
 type ItemProps = {
   item: HttpTypes.StoreCartLineItem
   type?: "full" | "preview"
+  currencyCode: string
 }
 
-const Item = ({ item, type = "full" }: ItemProps) => {
+const Item = ({ item, type = "full", currencyCode }: ItemProps) => {
   const [updating, setUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { handle } = item.variant?.product ?? {}
-
+  const isSticker = item.variant_id ? isStickerVariant(item.variant_id) : false
+  
   const changeQuantity = async (quantity: number) => {
     setError(null)
     setUpdating(true)
 
-    const message = await updateLineItem({
+    await updateLineItem({
       lineId: item.id,
       quantity,
     })
@@ -46,18 +48,50 @@ const Item = ({ item, type = "full" }: ItemProps) => {
   const maxQtyFromInventory = 10
   const maxQuantity = item.variant?.manage_inventory ? 10 : maxQtyFromInventory
 
+  // For stickers, use different quantity options due to MOQ requirements
+  const getStickerQuantityOptions = () => {
+    const currentQty = item.quantity
+    const baseOptions = [500, 1000, 2000, 5000, 10000]
+    
+    // Include current quantity if it's not in base options
+    if (!baseOptions.includes(currentQty)) {
+      baseOptions.push(currentQty)
+      baseOptions.sort((a, b) => a - b)
+    }
+    
+    return baseOptions.map(qty => (
+      <option value={qty} key={qty}>
+        {qty.toLocaleString()}
+      </option>
+    ))
+  }
+
+  // For regular products, use 1-10 range
+  const getRegularQuantityOptions = () => {
+    return Array.from(
+      {
+        length: Math.min(maxQuantity, 10),
+      },
+      (_, i) => (
+        <option value={i + 1} key={i}>
+          {i + 1}
+        </option>
+      )
+    )
+  }
+
   return (
     <Table.Row className="w-full" data-testid="product-row">
       <Table.Cell className="!pl-0 p-4 w-24">
         <LocalizedClientLink
-          href={`/products/${handle}`}
+          href={`/products/${item.product_handle}`}
           className={clx("flex", {
             "w-16": type === "preview",
             "small:w-24 w-12": type === "full",
           })}
         >
           <Thumbnail
-            thumbnail={item.variant?.product?.thumbnail}
+            thumbnail={item.thumbnail}
             images={item.variant?.product?.images}
             size="square"
           />
@@ -71,7 +105,15 @@ const Item = ({ item, type = "full" }: ItemProps) => {
         >
           {item.product_title}
         </Text>
-        <LineItemOptions variant={item.variant} data-testid="product-variant" />
+        <LineItemOptions 
+          variant={item.variant} 
+          data-testid="product-variant" 
+        />
+        {isSticker && item.quantity >= 1000 && (
+          <Text className="text-green-600 text-sm">
+            Bulk discount applied!
+          </Text>
+        )}
       </Table.Cell>
 
       {type === "full" && (
@@ -84,21 +126,7 @@ const Item = ({ item, type = "full" }: ItemProps) => {
               className="w-14 h-10 p-4"
               data-testid="product-select-button"
             >
-              {/* TODO: Update this with the v2 way of managing inventory */}
-              {Array.from(
-                {
-                  length: Math.min(maxQuantity, 10),
-                },
-                (_, i) => (
-                  <option value={i + 1} key={i}>
-                    {i + 1}
-                  </option>
-                )
-              )}
-
-              <option value={1} key={1}>
-                1
-              </option>
+              {isSticker ? getStickerQuantityOptions() : getRegularQuantityOptions()}
             </CartItemSelect>
             {updating && <Spinner />}
           </div>
@@ -108,7 +136,10 @@ const Item = ({ item, type = "full" }: ItemProps) => {
 
       {type === "full" && (
         <Table.Cell className="hidden small:table-cell">
-          <LineItemUnitPrice item={item} style="tight" />
+          <LineItemUnitPrice
+            item={item}
+            style="tight"
+          />
         </Table.Cell>
       )}
 
@@ -120,11 +151,18 @@ const Item = ({ item, type = "full" }: ItemProps) => {
         >
           {type === "preview" && (
             <span className="flex gap-x-1 ">
-              <Text className="text-ui-fg-muted">{item.quantity}x </Text>
-              <LineItemUnitPrice item={item} style="tight" />
+              <Text className="text-ui-fg-muted">{item.quantity.toLocaleString()}x </Text>
+              <LineItemUnitPrice
+                item={item}
+                style="tight"
+              />
             </span>
           )}
-          <LineItemPrice item={item} style="tight" />
+          <LineItemPrice
+            item={item}
+            style="tight"
+            currencyCode={currencyCode}
+          />
         </span>
       </Table.Cell>
     </Table.Row>

@@ -8,9 +8,36 @@ import { HttpTypes } from "@medusajs/types"
 type LineItemPriceProps = {
   item: HttpTypes.StoreCartLineItem | HttpTypes.StoreOrderLineItem
   style?: "default" | "tight"
+  currencyCode?: string
 }
 
-const LineItemPrice = ({ item, style = "default" }: LineItemPriceProps) => {
+const LineItemPrice = ({ item, style = "default", currencyCode }: LineItemPriceProps) => {
+  // For cart/order items, use the actual unit_price from the item
+  const hasItemPrice = 'unit_price' in item && item.unit_price !== null
+  
+  if (hasItemPrice) {
+    // Use the cart item's actual prices
+    const currency_code = currencyCode || 'EUR'
+    const totalPrice = item.unit_price * item.quantity
+    
+    return (
+      <div className="flex flex-col gap-x-2 text-ui-fg-subtle items-end">
+        <div className="text-left">
+          <span
+            className="text-base-regular"
+            data-testid="product-price"
+          >
+            {convertToLocale({
+              amount: totalPrice,
+              currency_code,
+            })}
+          </span>
+        </div>
+      </div>
+    )
+  }
+  
+  // Fallback to variant pricing for non-cart contexts
   const { currency_code, calculated_price_number, original_price_number } =
     getPricesForVariant(item.variant) ?? {}
 

@@ -24,3 +24,12 @@ export const convertToLocale = ({
       }).format(amount)
     : amount.toString()
 }
+
+export const formatPrice = (amount: number, currency_code: string = "EUR") => {
+  return convertToLocale({
+    amount,
+    currency_code,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}

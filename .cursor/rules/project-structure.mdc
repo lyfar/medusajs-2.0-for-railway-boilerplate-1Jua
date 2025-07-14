@@ -1,0 +1,37 @@
+# Medusa v2 Project Structure Guide
+
+This is a Medusa v2 ecommerce project with custom sticker functionality. The main structure is:
+
+## Backend Structure
+- **Main Project**: [backend/](mdc:backend/) - Primary Medusa v2 backend
+  - [backend/src/modules/](mdc:backend/src/modules/) - Custom modules (email-notifications, minio-file)
+  - [backend/src/api/](mdc:backend/src/api/) - API routes (admin, store, key-exchange)
+  - [backend/src/workflows/](mdc:backend/src/workflows/) - Medusa workflows
+  - [backend/src/subscribers/](mdc:backend/src/subscribers/) - Event subscribers
+  - [backend/package.json](mdc:backend/package.json) - Backend dependencies
+  - [backend/medusa-config.js](mdc:backend/medusa-config.js) - Main configuration
+
+## Frontend Structure
+- **Storefront**: [storefront/](mdc:storefront/) - Next.js 14 storefront
+  - [storefront/src/app/](mdc:storefront/src/app/) - App Router pages
+  - [storefront/src/modules/](mdc:storefront/src/modules/) - UI components
+  - [storefront/src/lib/](mdc:storefront/src/lib/) - Utilities and data fetching
+
+## Reference Implementation
+- **medusa4/**: Contains existing sticker implementation to migrate from
+  - [medusa4/my-sticker-store/](mdc:medusa4/my-sticker-store/) - Working sticker backend
+  - [medusa4/my-sticker-store-storefront/](mdc:medusa4/my-sticker-store-storefront/) - Working sticker frontend
+  - [medusa4/STICKER_IMPLEMENTATION_PLAN.md](mdc:medusa4/STICKER_IMPLEMENTATION_PLAN.md) - Implementation guide
+
+## Migration Strategy
+We are migrating sticker functionality step by step from medusa4 to the main project. Always reference the working implementation in medusa4 when implementing new features.
+
+## Key Technologies
+- Medusa v2.8.4
+- Next.js 14 (App Router)
+- TypeScript (strict mode)
+- PostgreSQL
+- Redis
+- MinIO (file storage)
+- MeiliSearch
+- Stripe payments
