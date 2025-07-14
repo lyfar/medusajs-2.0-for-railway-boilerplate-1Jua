@@ -21,7 +21,12 @@ import {
   MINIO_SECRET_KEY,
   MINIO_BUCKET,
   MEILISEARCH_HOST,
-  MEILISEARCH_ADMIN_KEY
+  MEILISEARCH_ADMIN_KEY,
+  R2_ENDPOINT,
+  R2_ACCESS_KEY_ID,
+  R2_SECRET_ACCESS_KEY,
+  R2_BUCKET,
+  R2_PUBLIC_URL
 } from 'lib/constants';
 
 loadEnv(process.env.NODE_ENV, process.cwd());
@@ -50,7 +55,7 @@ const medusaConfig = {
     }
   },
   admin: {
-    backendUrl: BACKEND_URL,
+    backendUrl: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000",
     disable: SHOULD_DISABLE_ADMIN,
   },
   modules: [
@@ -59,7 +64,17 @@ const medusaConfig = {
       resolve: '@medusajs/file',
       options: {
         providers: [
-          ...(MINIO_ENDPOINT && MINIO_ACCESS_KEY && MINIO_SECRET_KEY ? [{
+          ...(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY ? [{
+            resolve: './src/modules/cloudflare-r2-file',
+            id: 'cloudflare-r2',
+            options: {
+              endpoint: R2_ENDPOINT,
+              accessKeyId: R2_ACCESS_KEY_ID,
+              secretAccessKey: R2_SECRET_ACCESS_KEY,
+              bucket: R2_BUCKET || 'stickers',
+              publicUrl: R2_PUBLIC_URL
+            }
+          }] : MINIO_ENDPOINT && MINIO_ACCESS_KEY && MINIO_SECRET_KEY ? [{
             resolve: './src/modules/minio-file',
             id: 'minio',
             options: {

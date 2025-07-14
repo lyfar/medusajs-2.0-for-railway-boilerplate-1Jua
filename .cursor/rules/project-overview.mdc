@@ -1,0 +1,35 @@
+---
+title: Project Overview
+---
+
+# Project Overview
+We are building an e-commerce platform on **Medusa v2** (modular architecture) enabling shoppers to purchase **custom printed stickers**.
+
+## Shopper Flow
+1. **Upload artwork** (PNG/SVG/PDF) – files are stored in **Cloudflare R2** through a Medusa File Service.
+2. Choose **shape** (circle, square, rectangle, custom cut).
+3. Enter **size** (width × height) – pricing is proportional to **area**.
+4. Select **quantity** – tiered bulk discounts apply.
+5. Backend calculates a **dynamic price** via the `sticker-pricing` module.
+6. Shopper checks out (Medusa cart → order) and pays.  
+   The resulting **Order** in Medusa Admin shows sticker configuration, pricing breakdown, and a link to download the artwork.
+7. Admins can download the design asset from Cloudflare R2 directly from the order page.
+
+## Medusa-specific Implementation
+- **Modules (v2)** live under `backend/src/modules/`
+  • `sticker-pricing` – defines `StickerPricingService`, `pricing-calculator.ts`, and workflow helpers.  
+  • `minio-file` (to be adapted for Cloudflare R2) – implements the File Service used by the upload step.  
+  • `email-notifications` – sends transactional emails.
+- **Workflows** orchestrate multi-step logic. `workflows/add-sticker-to-cart.ts` + `steps/calculate-sticker-price.ts` compute line-item pricing when adding to cart.
+- **API Routes** expose sticker endpoints in `backend/src/api/store/stickers/*` and custom routes for uploads/pricing.
+- **Storefront** (Next.js App Router) consumes Medusa APIs. Pricing UI logic is in `storefront/src/lib/hooks/use-sticker-pricing.tsx`.
+
+## Docs alignment (Medusa v2)
+- Uses **Modules API** for custom domain logic (`StickerPricingModule`).  
+- Follows **Workflows & Steps** for transactional tasks.  
+- File uploads rely on **File Service** abstraction (compatible with R2).  
+- Pricing follows **Price Sets & Calculators** guidelines for custom products.
+
+> MCP: Medusa documentation is available through MCP Context 7 — consult it whenever deeper technical details are required.
+
+This rule provides high-level context so AI agents understand the domain, architecture, and where to look in the codebase.

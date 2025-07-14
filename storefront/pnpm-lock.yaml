@@ -16,13 +16,13 @@ dependencies:
     version: 2.0.1(react-dom@18.3.1)(react-hook-form@7.60.0)(react@18.3.1)
   '@medusajs/js-sdk':
     specifier: preview
-    version: 2.8.8-preview-20250714033004(awilix@8.0.1)
+    version: 2.8.8-preview-20250714060147(awilix@8.0.1)
   '@medusajs/types':
     specifier: preview
-    version: 2.8.8-preview-20250714033004(awilix@8.0.1)
+    version: 2.8.8-preview-20250714060147(awilix@8.0.1)
   '@medusajs/ui':
     specifier: preview
-    version: 4.0.18-preview-20250714033004(@types/react-dom@18.3.7)(@types/react@18.3.23)(react-dom@18.3.1)(react@18.3.1)(typescript@5.8.3)
+    version: 4.0.18-preview-20250714060147(@types/react-dom@18.3.7)(@types/react@18.3.23)(react-dom@18.3.1)(react@18.3.1)(typescript@5.8.3)
   '@meilisearch/instant-meilisearch':
     specifier: ^0.7.1
     version: 0.7.1
@@ -50,6 +50,9 @@ dependencies:
   lodash:
     specifier: ^4.17.21
     version: 4.17.21
+  lucide-react:
+    specifier: ^0.525.0
+    version: 0.525.0(react@18.3.1)
   medusajs-launch-utils:
     specifier: ^0.0.16
     version: 0.0.16
@@ -71,6 +74,9 @@ dependencies:
   react-dom:
     specifier: ^18.2.0
     version: 18.3.1(react@18.3.1)
+  react-dropzone:
+    specifier: ^14.3.8
+    version: 14.3.8(react@18.3.1)
   react-instantsearch-hooks-web:
     specifier: ^6.29.0
     version: 6.47.3(algoliasearch@4.25.2)(react-dom@18.3.1)(react@18.3.1)
@@ -96,7 +102,7 @@ devDependencies:
     version: 0.2.12-preview-20240505115807
   '@medusajs/ui-preset':
     specifier: preview
-    version: 2.8.8-preview-20250714033004(tailwindcss@3.4.17)
+    version: 2.8.8-preview-20250714060147(tailwindcss@3.4.17)
   '@playwright/test':
     specifier: ^1.41.1
     version: 1.54.1
@@ -622,19 +628,19 @@ packages:
     resolution: {integrity: sha512-f7T/7WUAGOFfsNsjdCcVoWLlAqryaQB+hF0v/Dzst2hv+PdJGqHfHwTNdeK3ZYhUwzSQ8YdnCYsj9OEJR9SPiQ==}
     dev: true
 
-  /@medusajs/icons@2.8.8-preview-20250714033004(react@18.3.1):
-    resolution: {integrity: sha512-5pwhw4/jB/dcxmKZkrJjWBl8KUaqJTLoTF89m5qFcaYFeruIrjCWBKAcw/rjZ5bpTi4G4X5fJqyvSMMHexsRVw==}
+  /@medusajs/icons@2.8.8-preview-20250714060147(react@18.3.1):
+    resolution: {integrity: sha512-o/LeKXkJ5XfdQRoin2y7c1tt/e0PYts7+FlSjlvRzLtLyQ2rRl2wAmgCOhI8jcrwp+dcgLN6Y54xkQSvHBEcZg==}
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0 || ^19.0.0-rc
     dependencies:
       react: 18.3.1
     dev: false
 
-  /@medusajs/js-sdk@2.8.8-preview-20250714033004(awilix@8.0.1):
-    resolution: {integrity: sha512-taKOoMYcNVWYGHTNKn3Fw8IyruU58rS2Ijt2x3vkUMYajRW6DLU0QaaL9b2/XMuDfqBKYYIyOIxKqsQy0NdN+Q==}
+  /@medusajs/js-sdk@2.8.8-preview-20250714060147(awilix@8.0.1):
+    resolution: {integrity: sha512-kvyASm7SUWtrLd6a+6ZbPG8vUlaULF8cyhqaSY3YFNmHw0KjcSbrZmkGrjCJJkTlRHwdqujxW/hF86mQ22+HOQ==}
     engines: {node: '>=20'}
     dependencies:
-      '@medusajs/types': 2.8.8-preview-20250714033004(awilix@8.0.1)
+      '@medusajs/types': 2.8.8-preview-20250714060147(awilix@8.0.1)
       fetch-event-stream: 0.1.5
       qs: 6.14.0
     transitivePeerDependencies:
@@ -643,8 +649,8 @@ packages:
       - vite
     dev: false
 
-  /@medusajs/types@2.8.8-preview-20250714033004(awilix@8.0.1):
-    resolution: {integrity: sha512-OHW/a+4z+FlZAvozv9VLeki6TKOGOVSMLVu8opKvsDkym6nOpdd2rOOKddi5eAvp2qNlWw78rNAH6ChWHV9SVg==}
+  /@medusajs/types@2.8.8-preview-20250714060147(awilix@8.0.1):
+    resolution: {integrity: sha512-nkedw5touEYIUGT/u/LnlKktFQVirg5Wk+DI55qhU1Sr0SWn6zNKxL+4n5+cSmrCvkYAdHyydGikKWs1wI3Pfg==}
     engines: {node: '>=20'}
     peerDependencies:
       awilix: ^8.0.1
@@ -660,8 +666,8 @@ packages:
       bignumber.js: 9.3.1
     dev: false
 
-  /@medusajs/ui-preset@2.8.8-preview-20250714033004(tailwindcss@3.4.17):
-    resolution: {integrity: sha512-63REM4Hx3n9x15V0a+Z9v+fUbQdoASlGKuBkDUPHrJN/pcpymHSWsJqksZBU/OwawaphD2d6NkOznzq97E7OgA==}
+  /@medusajs/ui-preset@2.8.8-preview-20250714060147(tailwindcss@3.4.17):
+    resolution: {integrity: sha512-r9aHmWC9SNurHcqspY7P+BbqIsMuicwkJVUlhgf++jNKSxp7VWOZpw66sL9vcqHov7zHFuU0Pt7+U1OjPbSIsw==}
     peerDependencies:
       tailwindcss: '>=3.0.0'
     dependencies:
@@ -670,13 +676,13 @@ packages:
       tailwindcss-animate: 1.0.7(tailwindcss@3.4.17)
     dev: true
 
-  /@medusajs/ui@4.0.18-preview-20250714033004(@types/react-dom@18.3.7)(@types/react@18.3.23)(react-dom@18.3.1)(react@18.3.1)(typescript@5.8.3):
-    resolution: {integrity: sha512-lxNVCg3BMemGLi2js5vLv/3adZXnA0PjT/WVDd4y9JoepbjBsOFeozO7lQOvauHaoWf54J/Lx2SEtO/JUdMgWw==}
+  /@medusajs/ui@4.0.18-preview-20250714060147(@types/react-dom@18.3.7)(@types/react@18.3.23)(react-dom@18.3.1)(react@18.3.1)(typescript@5.8.3):
+    resolution: {integrity: sha512-Jg8gIdcEaoagSPrWYpeTHktoy+95WK+6ySprvMpYpssdOlZPVThGZ+WLaX3g1V1/fX7hQ56rS2ooYSXVJDVVrg==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
       react-dom: ^18.0.0 || ^19.0.0 || ^19.0.0-rc
     dependencies:
-      '@medusajs/icons': 2.8.8-preview-20250714033004(react@18.3.1)
+      '@medusajs/icons': 2.8.8-preview-20250714060147(react@18.3.1)
       '@tanstack/react-table': 8.20.5(react-dom@18.3.1)(react@18.3.1)
       clsx: 1.2.1
       copy-to-clipboard: 3.3.3
@@ -4271,6 +4277,11 @@ packages:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
     dev: false
 
+  /attr-accept@2.2.5:
+    resolution: {integrity: sha512-0bDNnY/u6pPwHDMoF0FieU354oBi0a8rD9FcsLwzcGWbc8KS8KPIi7y+s13OlVY+gMWc/9xEMUgNE6Qm8ZllYQ==}
+    engines: {node: '>=4'}
+    dev: false
+
   /autoprefixer@10.4.21(postcss@8.5.6):
     resolution: {integrity: sha512-O+A6LWV5LDHSJD3LjHYoNi4VLsj/Whi7k6zG12xTYaU4cQ8oxQGckXNX8cRHK5yOZ/ppVHe0ZBXGzSV9jXdVbQ==}
     engines: {node: ^10 || ^12 || >=14}
@@ -5221,6 +5232,13 @@ packages:
       flat-cache: 3.2.0
     dev: true
 
+  /file-selector@2.1.2:
+    resolution: {integrity: sha512-QgXo+mXTe8ljeqUFaX3QVHc5osSItJ/Km+xpocx0aSqWGMSCf6qYs/VnzZgS864Pjn5iceMRFigeAV7AfTlaig==}
+    engines: {node: '>= 12'}
+    dependencies:
+      tslib: 2.8.1
+    dev: false
+
   /fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
@@ -5969,6 +5987,14 @@ packages:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
     dependencies:
       yallist: 3.1.1
+
+  /lucide-react@0.525.0(react@18.3.1):
+    resolution: {integrity: sha512-Tm1txJ2OkymCGkvwoHt33Y2JpN5xucVq1slHcgE6Lk0WjDfjgKWor5CdVER8U6DvcfMwh4M8XxmpTiyzfmfDYQ==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+    dependencies:
+      react: 18.3.1
+    dev: false
 
   /make-dir@3.1.0:
     resolution: {integrity: sha512-g3FeP20LNwhALb/6Cz6Dd4F2ngze0jz7tbzrD2wAV+o9FeNHe4rL+yK2md0J/fiSf1sa1ADhXqi5+oVwOM/eGw==}
@@ -6771,6 +6797,18 @@ packages:
       loose-envify: 1.4.0
       react: 18.3.1
       scheduler: 0.23.2
+    dev: false
+
+  /react-dropzone@14.3.8(react@18.3.1):
+    resolution: {integrity: sha512-sBgODnq+lcA4P296DY4wacOZz3JFpD99fp+hb//iBO2HHnyeZU3FwWyXJ6salNpqQdsZrgMrotuko/BdJMV8Ug==}
+    engines: {node: '>= 10.13'}
+    peerDependencies:
+      react: '>= 16.8 || 18.0.0'
+    dependencies:
+      attr-accept: 2.2.5
+      file-selector: 2.1.2
+      prop-types: 15.8.1
+      react: 18.3.1
     dev: false
 
   /react-hook-form@7.60.0(react@18.3.1):

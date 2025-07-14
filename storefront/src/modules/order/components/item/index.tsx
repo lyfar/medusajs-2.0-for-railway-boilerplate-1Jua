@@ -11,6 +11,8 @@ type ItemProps = {
 }
 
 const Item = ({ item }: ItemProps) => {
+  const designUrl = (item.metadata?.design_url as string) || null
+
   return (
     <Table.Row className="w-full" data-testid="product-row">
       <Table.Cell className="!pl-0 p-4 w-24">
@@ -28,6 +30,24 @@ const Item = ({ item }: ItemProps) => {
         </Text>
         {item.variant && (
           <LineItemOptions variant={item.variant} data-testid="product-variant" />
+        )}
+        {designUrl && (
+          <div className="flex items-center gap-x-2 mt-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={designUrl}
+              alt="Sticker design preview"
+              className="w-12 h-12 object-cover border rounded-md"
+            />
+            <a
+              href={designUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-ui-fg-interactive hover:underline"
+            >
+              View design
+            </a>
+          </div>
         )}
       </Table.Cell>
 

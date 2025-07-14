@@ -17,6 +17,7 @@ import { isStickerVariant, STICKER_MOQ } from "@lib/util/sticker-utils"
 import { useStickerPricing } from "@lib/hooks/use-sticker-pricing"
 import StickerPricingDisplay from "../sticker-pricing"
 import StickerQuantitySelector from "../sticker-pricing/quantity-selector"
+import FileUpload from "../file-upload"
 
 type ProductActionsProps = {
   product: HttpTypes.StoreProduct
@@ -41,6 +42,8 @@ export default function ProductActions({
   const [options, setOptions] = useState<Record<string, string | undefined>>({})
   const [isAdding, setIsAdding] = useState(false)
   const [stickerQuantity, setStickerQuantity] = useState<number>(STICKER_MOQ)
+  const [uploadedFileKey, setUploadedFileKey] = useState<string | null>(null)
+  const [uploadedPublicUrl, setUploadedPublicUrl] = useState<string | null>(null)
   const countryCode = useParams().countryCode as string
 
   // If there is only 1 variant, preselect the options
@@ -124,6 +127,10 @@ export default function ProductActions({
           variantId: selectedVariant.id,
           quantity: stickerQuantity,
           countryCode,
+          metadata: {
+            file_key: uploadedFileKey,
+            design_url: uploadedPublicUrl,
+          },
         })
       } else {
         await addToCart({
@@ -137,6 +144,11 @@ export default function ProductActions({
     }
 
     setIsAdding(false)
+  }
+
+  const handleFileUploadComplete = (fileKey: string, publicUrl: string) => {
+    setUploadedFileKey(fileKey)
+    setUploadedPublicUrl(publicUrl)
   }
 
   return (
@@ -167,6 +179,9 @@ export default function ProductActions({
         {/* Conditional content based on sticker vs regular product */}
         {isSticker ? (
           <div className="space-y-4">
+            {/* Sticker Design Upload */}
+            <FileUpload onUploadComplete={handleFileUploadComplete} disabled={!!disabled || isAdding} />
+
             {/* Sticker Quantity Selector */}
             <StickerQuantitySelector
               quantity={stickerQuantity}
@@ -207,7 +222,12 @@ export default function ProductActions({
             !selectedVariant ||
             !!disabled ||
             isAdding ||
-            (isSticker && (pricingLoading || !!pricingError || !stickerPricing))
+            (isSticker && (
+              pricingLoading ||
+              !!pricingError ||
+              !stickerPricing ||
+              !uploadedFileKey
+            ))
           }
           variant="primary"
           className="w-full h-10"

@@ -404,10 +404,12 @@ export async function addStickerToCart({
   variantId,
   quantity,
   countryCode,
+  metadata,
 }: {
   variantId: string
   quantity: number
   countryCode: string
+  metadata?: Record<string, unknown>
 }) {
   const cart = await getOrSetCart(countryCode)
 
@@ -427,6 +429,7 @@ export async function addStickerToCart({
       body: {
         variant_id: variantId,
         quantity,
+        ...(metadata ? { metadata } : {}),
       },
     })
     .then(() => {

@@ -44,6 +44,8 @@ const Item = ({ item, type = "full", currencyCode }: ItemProps) => {
       })
   }
 
+  const designUrl = (item.metadata?.design_url as string) || null
+
   // TODO: Update this to grab the actual max inventory
   const maxQtyFromInventory = 10
   const maxQuantity = item.variant?.manage_inventory ? 10 : maxQtyFromInventory
@@ -109,10 +111,23 @@ const Item = ({ item, type = "full", currencyCode }: ItemProps) => {
           variant={item.variant} 
           data-testid="product-variant" 
         />
-        {isSticker && item.quantity >= 1000 && (
-          <Text className="text-green-600 text-sm">
-            Bulk discount applied!
-          </Text>
+        {designUrl && (
+          <div className="flex items-center gap-x-2 mt-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={designUrl}
+              alt="Sticker design preview"
+              className="w-12 h-12 object-cover border rounded-md"
+            />
+            <a
+              href={designUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-ui-fg-interactive hover:underline"
+            >
+              View design
+            </a>
+          </div>
         )}
       </Table.Cell>
 

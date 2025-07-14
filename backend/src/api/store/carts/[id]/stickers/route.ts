@@ -43,7 +43,7 @@ export async function POST(
     })
 
     return res.json({
-      cart: result.cart,
+      cart: result,
       success: true
     })
   } catch (error) {
