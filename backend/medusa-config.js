@@ -41,7 +41,11 @@ const medusaConfig = {
     },
     build: {
       rollupOptions: {
-        external: ["@medusajs/dashboard"]
+        external: ["@medusajs/dashboard"],
+        treeshake: false,
+        output: {
+          preserveModules: true
+        }
       }
     }
   },
