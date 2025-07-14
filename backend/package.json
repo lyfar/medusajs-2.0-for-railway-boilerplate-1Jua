@@ -37,16 +37,17 @@
     "@react-email/components": "^0.0.26",
     "@rokmohar/medusa-plugin-meilisearch": "^1.1.4",
     "awilix": "^8.0.1",
-    "medusajs-launch-utils": "^0.0.16",
+    "medusajs-launch-utils": "^0.0.18",
     "minio": "^8.0.3",
     "pg": "^8.13.1",
     "resend": "4.0.1",
-    "ulid": "^2.3.0"
+    "ulid": "^2.3.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@medusajs/test-utils": "latest",
     "@mikro-orm/cli": "6.4.3",
-    "@swc/core": "1.5.7",
+    "@swc/core": "1.5.29",
     "@swc/jest": "^0.2.37",
     "@types/jest": "^29.5.14",
     "@types/node": "^20.17.10",
