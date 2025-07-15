@@ -143,6 +143,21 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
 
   return (
     <div className="w-full max-w-[1600px] mx-auto">
+      {/* Top Preview Section */}
+      <div className="mb-8">
+        <div className="rounded-xl bg-neutral-900 p-8 border border-neutral-800 shadow-xl">
+          <div className="flex justify-center items-center">
+            <ImageDropZone 
+              shape={shape} 
+              dimensions={dimensions} 
+              onFileUpload={handleFileUpload}
+              disabled={disabled}
+              compact={false}
+            />
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
         <div className="xl:col-span-2 space-y-8">
           <div>
@@ -244,15 +259,6 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
         </div>
 
         <div className="xl:col-span-1 space-y-6">
-          <div className="rounded-xl bg-neutral-900 p-8 border border-neutral-800 shadow-xl">
-            <ImageDropZone 
-              shape={shape} 
-              dimensions={dimensions} 
-              onFileUpload={handleFileUpload}
-              disabled={disabled}
-            />
-          </div>
-
           <div className="rounded-xl bg-neutral-900 p-8 border border-neutral-800 shadow-xl">
             <div className="space-y-6">
               <div>

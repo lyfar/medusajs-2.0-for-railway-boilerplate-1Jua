@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { Minus, Plus, Upload, Check, AlertCircle } from 'lucide-react';
+import { Minus, Plus, Upload, Check, AlertCircle, Scissors, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
@@ -16,9 +16,10 @@ interface ImageDropZoneProps {
   };
   onFileUpload?: (fileKey: string, publicUrl: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 
-export default function ImageDropZone({ shape, dimensions, onFileUpload, disabled }: ImageDropZoneProps) {
+export default function ImageDropZone({ shape, dimensions, onFileUpload, disabled, compact = false }: ImageDropZoneProps) {
   const [image, setImage] = useState<string | null>(null);
   const [scale, setScale] = useState(1);
   const [hasTransparency, setHasTransparency] = useState(false);
@@ -26,6 +27,7 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [showCutlines, setShowCutlines] = useState(false);
 
   /**
    * Uploads file to backend and gets the file key and public URL
@@ -216,23 +218,119 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
     setScale(prev => Math.max(0.5, Math.min(3, prev + delta)));
   };
 
+  // Generate cut lines and safety margins overlay based on shape
+  const CutLinesOverlay = () => {
+    if (!showCutlines) return null;
+
+    const getCutLineStyle = () => {
+      switch (shape) {
+        case 'circle':
+          return {
+            border: '3px dashed #ef4444',
+            borderRadius: '50%',
+            width: '100%',
+            height: '100%',
+            position: 'absolute' as const,
+            top: 0,
+            left: 0,
+            zIndex: 10,
+            pointerEvents: 'none' as const,
+            boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.3)',
+          };
+        case 'rectangle':
+        case 'square':
+          return {
+            border: '3px dashed #ef4444',
+            borderRadius: shape === 'square' ? '12px' : '12px',
+            width: '100%',
+            height: '100%',
+            position: 'absolute' as const,
+            top: 0,
+            left: 0,
+            zIndex: 10,
+            pointerEvents: 'none' as const,
+            boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.3)',
+          };
+        case 'diecut':
+          return {
+            border: '3px dashed #ef4444',
+            clipPath: hasTransparency ? 'none' : starClipPath,
+            width: '100%',
+            height: '100%',
+            position: 'absolute' as const,
+            top: 0,
+            left: 0,
+            zIndex: 10,
+            pointerEvents: 'none' as const,
+            boxShadow: '0 0 0 1px rgba(239, 68, 68, 0.3)',
+          };
+        default:
+          return {};
+      }
+    };
+
+    const getSafetyMarginStyle = () => {
+      return {
+        border: '2px dashed #fbbf24', // amber-400
+        width: 'calc(100% - 16px)',
+        height: 'calc(100% - 16px)',
+        position: 'absolute' as const,
+        top: '8px',
+        left: '8px',
+        zIndex: 9,
+        pointerEvents: 'none' as const,
+        borderRadius: shape === 'circle' ? '50%' : '8px',
+        boxShadow: '0 0 0 2px rgba(251, 191, 36, 0.3)',
+      };
+    };
+
+    return (
+      <>
+        {/* Safety margin */}
+        <div style={getSafetyMarginStyle()} title="Safety margin - keep important design elements within this area"></div>
+        
+        {/* Cut line */}
+        <div style={getCutLineStyle()} title="Cut line - your sticker will be cut along this line">
+          {/* Corner indicators for rectangular shapes */}
+          {(shape === 'rectangle' || shape === 'square') && (
+            <>
+              <div className="absolute -top-1 -left-1 w-2 h-2 bg-red-500 rounded-full"></div>
+              <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
+              <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-red-500 rounded-full"></div>
+              <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></div>
+            </>
+          )}
+          
+          {/* Center cross for die cut */}
+          {shape === 'diecut' && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-4 h-0.5 bg-red-500"></div>
+              <div className="w-0.5 h-4 bg-red-500 absolute"></div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
   // Calculate the display size while maintaining aspect ratio.
   const getShapeStyle = () => {
-    const maxWidth = 400;
+    const maxWidth = compact ? 200 : 500;
+    const minHeight = compact ? 100 : 150;
     let width: number;
     let height: number;
 
     if (shape === 'circle' && dimensions.diameter) {
-      width = height = Math.min(maxWidth, dimensions.diameter * 25);
+      width = height = Math.min(maxWidth, Math.max(minHeight, dimensions.diameter * (compact ? 25 : 40)));
     } else if (shape === 'square') {
-      width = height = Math.min(maxWidth, (dimensions.width || 8) * 25);
+      width = height = Math.min(maxWidth, Math.max(minHeight, (dimensions.width || 8) * (compact ? 25 : 40)));
     } else if (shape === 'rectangle' || shape === 'diecut') {
       if (dimensions.width && dimensions.height) {
         const aspectRatio = dimensions.width / dimensions.height;
-        width = Math.min(maxWidth, dimensions.width * 25);
+        width = Math.min(maxWidth, Math.max(minHeight, dimensions.width * (compact ? 25 : 40)));
         height = width / aspectRatio;
-        if (height < 120) {
-          height = 120;
+        if (height < minHeight) {
+          height = minHeight;
           width = height * aspectRatio;
         }
       } else {
@@ -243,6 +341,11 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
       width = maxWidth;
       height = maxWidth;
     }
+
+    // Ensure minimum visible size even for very small stickers
+    const minVisibleSize = 120;
+    width = Math.max(width, minVisibleSize);
+    height = Math.max(height, minVisibleSize);
 
     return {
       width: `${width}px`,
@@ -265,8 +368,19 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
   )`;
 
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-white">Preview Your Design</h3>
+    <div className={compact ? "space-y-4" : "space-y-6"}>
+      {compact && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-neutral-400">
+            <span>
+              {shape === 'circle' 
+                ? `${dimensions.diameter}cm ⌀`
+                : `${dimensions.width}cm × ${dimensions.height}cm`
+              }
+            </span>
+          </div>
+        </div>
+      )}
       
       {uploadError && (
         <div className="p-3 bg-red-900/20 border border-red-500/50 rounded-md flex items-center gap-2">
@@ -282,7 +396,7 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
         </div>
       )}
 
-      <div className="flex items-center justify-center">
+      <div className={compact ? "flex items-center gap-6" : "flex items-center justify-center"}>
         <div
           {...getRootProps()}
           style={getShapeStyle()}
@@ -306,6 +420,9 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
             style={shape === 'diecut' && !hasTransparency ? { clipPath: starClipPath } : undefined}
           >
             <input {...getInputProps()} />
+            
+            {/* Cut lines and safety margins overlay - always visible when toggled */}
+            <CutLinesOverlay />
             
             {image ? (
               <div className="relative w-full h-full overflow-hidden">
@@ -429,18 +546,49 @@ export default function ImageDropZone({ shape, dimensions, onFileUpload, disable
         </div>
       </div>
 
-      <div className="space-y-2">
-        <div className="text-sm text-neutral-400">
-          {shape === 'circle' 
-            ? `Size: ${dimensions.diameter}cm diameter`
-            : `Size: ${dimensions.width}cm × ${dimensions.height}cm`
-          }
+      {!compact && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-neutral-400">
+              {shape === 'circle' 
+                ? `Size: ${dimensions.diameter}cm diameter`
+                : `Size: ${dimensions.width}cm × ${dimensions.height}cm`
+              }
+            </div>
+            <button
+              onClick={() => setShowCutlines(!showCutlines)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg transition-colors"
+              title="Toggle cutting lines and safety margins preview"
+            >
+              <Scissors className="w-4 h-4" />
+              {showCutlines ? 'Hide' : 'Show'} Cut Lines
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0 border-t-2 border-dashed border-red-500"></div>
+              <span className="text-xs text-neutral-500">Cut line</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0 border-t border-dashed border-amber-400"></div>
+              <span className="text-xs text-neutral-500">Safety margin</span>
+            </div>
+          </div>
+          <p className="text-xs text-neutral-500">
+            Supported formats: PNG, JPG, GIF. Your image will be automatically fitted to match your {shape} sticker dimensions.
+            {shape === 'diecut' && ' For best results, use a PNG with transparency.'}
+          </p>
         </div>
-        <p className="text-xs text-neutral-500">
-          Supported formats: PNG, JPG, GIF. Your image will be automatically fitted to match your {shape} sticker dimensions.
-          {shape === 'diecut' && ' For best results, use a PNG with transparency.'}
-        </p>
-      </div>
+      )}
+      
+      {compact && (
+        <div className="flex-1 ml-2">
+          <p className="text-xs text-neutral-500">
+            Supported formats: PNG, JPG, GIF.
+            {shape === 'diecut' && ' For best results, use PNG with transparency.'}
+          </p>
+        </div>
+      )}
     </div>
   );
 } 

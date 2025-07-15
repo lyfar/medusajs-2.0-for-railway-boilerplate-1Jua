@@ -26,6 +26,35 @@ const CartDropdown = ({
   const open = () => setCartDropdownOpen(true)
   const close = () => setCartDropdownOpen(false)
 
+  // Fix malformed Cloudflare R2 URLs
+  const normalizeCloudflareUrl = (url: string) => {
+    // Check if URL has the malformed pattern: r2.devpk_
+    if (url.includes('r2.devpk_')) {
+      // Extract the filename from the end of the URL
+      const filename = url.split('/').pop()
+      // Replace the malformed part with correct structure
+      const baseUrl = url.split('r2.devpk_')[0] + 'r2.dev/'
+      return baseUrl + filename
+    }
+    return url
+  }
+
+  // Format size display from dimensions
+  const formatSizeDisplay = (metadata: any) => {
+    const dimensions = metadata?.dimensions as { width?: number; height?: number; diameter?: number } | undefined
+    if (!dimensions) return null
+    
+    if (dimensions.diameter) {
+      return `${dimensions.diameter} cm`
+    }
+    
+    if (dimensions.width && dimensions.height) {
+      return `${dimensions.width} x ${dimensions.height} cm`
+    }
+    
+    return null
+  }
+
   const totalItems =
     cartState?.items?.reduce((acc, item) => {
       return acc + item.quantity
@@ -110,62 +139,102 @@ const CartDropdown = ({
                         ? -1
                         : 1
                     })
-                    .map((item) => (
-                      <div
-                        className="grid grid-cols-[122px_1fr] gap-x-4"
-                        key={item.id}
-                        data-testid="cart-item"
-                      >
-                        <LocalizedClientLink
-                          href={`/products/${item.variant?.product?.handle}`}
-                          className="w-24"
+                    .map((item) => {
+                      const rawDesignUrl = (item.metadata?.design_url as string) || null
+                      const designUrl = rawDesignUrl ? normalizeCloudflareUrl(rawDesignUrl) : null
+                      const isSticker = !!item.metadata?.shape || !!designUrl
+                      
+                      return (
+                        <div
+                          className="grid grid-cols-[122px_1fr] gap-x-4"
+                          key={item.id}
+                          data-testid="cart-item"
                         >
-                          <Thumbnail
-                            thumbnail={item.variant?.product?.thumbnail}
-                            images={item.variant?.product?.images}
-                            size="square"
-                          />
-                        </LocalizedClientLink>
-                        <div className="flex flex-col justify-between flex-1">
-                          <div className="flex flex-col flex-1">
-                            <div className="flex items-start justify-between">
-                              <div className="flex flex-col overflow-ellipsis whitespace-nowrap mr-4 w-[180px]">
-                                <h3 className="text-base-regular overflow-hidden text-ellipsis text-white">
-                                  <LocalizedClientLink
-                                    href={`/products/${item.variant?.product?.handle}`}
-                                    data-testid="product-link"
-                                  >
-                                    {item.title}
-                                  </LocalizedClientLink>
-                                </h3>
-                                <LineItemOptions
-                                  variant={item.variant}
-                                  data-testid="cart-item-variant"
-                                  data-value={item.variant}
+                          <LocalizedClientLink
+                            href={`/products/${item.variant?.product?.handle}`}
+                            className="w-24"
+                          >
+                            {designUrl ? (
+                              <div className="w-24 h-24 rounded-md overflow-hidden bg-card">
+                                <img
+                                  src={designUrl}
+                                  alt="Custom sticker design"
+                                  className="w-full h-full object-cover"
                                 />
-                                <span
-                                  className="text-neutral-400"
-                                  data-testid="cart-item-quantity"
-                                  data-value={item.quantity}
-                                >
-                                  Quantity: {item.quantity}
-                                </span>
                               </div>
-                              <div className="flex justify-end">
-                                <LineItemPrice item={item} style="tight" />
+                            ) : (
+                              <Thumbnail
+                                thumbnail={item.variant?.product?.thumbnail}
+                                images={item.variant?.product?.images}
+                                size="square"
+                              />
+                            )}
+                          </LocalizedClientLink>
+                          <div className="flex flex-col justify-between flex-1">
+                            <div className="flex flex-col flex-1">
+                              <div className="flex items-start justify-between">
+                                <div className="flex flex-col overflow-ellipsis whitespace-nowrap mr-4 w-[180px]">
+                                  <h3 className="text-base-regular overflow-hidden text-ellipsis text-white">
+                                    <LocalizedClientLink
+                                      href={`/products/${item.variant?.product?.handle}`}
+                                      data-testid="product-link"
+                                    >
+                                      {item.title}
+                                    </LocalizedClientLink>
+                                  </h3>
+                                  
+                                  {!isSticker && (
+                                    <LineItemOptions
+                                      variant={item.variant}
+                                      data-testid="cart-item-variant"
+                                      data-value={item.variant}
+                                    />
+                                  )}
+                                  
+                                  {isSticker && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {typeof item.metadata?.shape === "string" && (
+                                        <span className="px-1 py-0.5 bg-muted text-muted-foreground text-xs rounded border border-border">
+                                          {item.metadata.shape}
+                                        </span>
+                                      )}
+                                      {formatSizeDisplay(item.metadata) && (
+                                        <span className="px-1 py-0.5 bg-muted text-muted-foreground text-xs rounded border border-border">
+                                          {formatSizeDisplay(item.metadata)}
+                                        </span>
+                                      )}
+                                      {designUrl && (
+                                        <span className="px-1 py-0.5 bg-primary text-primary-foreground text-xs rounded border border-primary">
+                                          Custom Design
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  
+                                  <span
+                                    className="text-neutral-400 mt-1"
+                                    data-testid="cart-item-quantity"
+                                    data-value={item.quantity}
+                                  >
+                                    Quantity: {item.quantity}
+                                  </span>
+                                </div>
+                                <div className="flex justify-end">
+                                  <LineItemPrice item={item} style="tight" />
+                                </div>
                               </div>
                             </div>
+                            <DeleteButton
+                              id={item.id}
+                              className="mt-1"
+                              data-testid="cart-item-remove-button"
+                            >
+                              Remove
+                            </DeleteButton>
                           </div>
-                          <DeleteButton
-                            id={item.id}
-                            className="mt-1"
-                            data-testid="cart-item-remove-button"
-                          >
-                            Remove
-                          </DeleteButton>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                 </div>
                 <div className="p-4 flex flex-col gap-y-4 text-small-regular border-t border-neutral-800">
                   <div className="flex items-center justify-between">
