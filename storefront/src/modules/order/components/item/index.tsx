@@ -1,3 +1,5 @@
+"use client"
+
 import { HttpTypes } from "@medusajs/types"
 import { Table, Text } from "@medusajs/ui"
 import { useState } from "react"
