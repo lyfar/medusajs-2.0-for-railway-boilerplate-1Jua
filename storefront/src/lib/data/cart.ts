@@ -22,7 +22,7 @@ export async function retrieveCart() {
       cartId,
       {
         fields:
-          "+payment_collection,+payment_collection.payment_providers,+payment_collection.payment_sessions",
+          "+payment_collection,+payment_collection.payment_providers,+payment_collection.payment_sessions,+completed_at",
       },
       { next: { tags: ["cart"] }, ...getAuthHeaders() }
     )
@@ -38,6 +38,12 @@ export async function getOrSetCart(countryCode: string) {
 
   if (!region) {
     throw new Error(`Region not found for country code: ${countryCode}`)
+  }
+
+  // @ts-ignore
+  if (cart && cart.completed_at) {
+    removeCartId()
+    cart = null
   }
 
   if (!cart) {
