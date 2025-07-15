@@ -6,16 +6,16 @@ import Register from "@modules/account/components/register"
 import Login from "@modules/account/components/login"
 
 export enum LOGIN_VIEW {
-  SIGN_IN = "sign-in",
-  REGISTER = "register",
+  SIGN_IN,
+  REGISTER,
 }
 
 const LoginTemplate = () => {
-  const [currentView, setCurrentView] = useState("sign-in")
+  const [currentView, setCurrentView] = useState(LOGIN_VIEW.SIGN_IN)
 
   return (
-    <div className="w-full flex justify-start px-8 py-8">
-      {currentView === "sign-in" ? (
+    <div className="w-full flex justify-center py-24 bg-gray-900 dark:bg-black text-white">
+      {currentView === LOGIN_VIEW.SIGN_IN ? (
         <Login setCurrentView={setCurrentView} />
       ) : (
         <Register setCurrentView={setCurrentView} />

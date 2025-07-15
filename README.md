@@ -1,9 +1,9 @@
 <p align="center">
-  <a href="https://www.medusajs.com">
+  <a href="https://www.eggshell.com">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/59018053/229103275-b5e482bb-4601-46e6-8142-244f531cebdb.svg">
       <source media="(prefers-color-scheme: light)" srcset="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg">
-      <img alt="Medusa logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg" width=100>
+      <img alt="EggShell logo" src="https://user-images.githubusercontent.com/59018053/229103726-e5b529a3-9b3f-4970-8a1f-c6af37f087bf.svg" width=100>
     </picture>
   </a>
   <a href="https://railway.app/template/gkU-27?referralCode=-Yg50p">
@@ -16,7 +16,7 @@
 </p>
 
 <h2 align="center">
-  Prebaked medusajs 2.0 monorepo
+  EggShell
 </h2>
 <h4 align="center">
   Backend + Storefront + postgres + redis + MinIO + MeiliSearch
@@ -41,7 +41,7 @@ Updated: to `version 2.8.4` 🥳
 
 ## Preconfigured 3rd party integrations
 
-- MinIO file storage: Replaces local file storage with MinIO cloud storage, automatically creating a 'medusa-media' bucket for your media files. [README](backend/src/modules/minio-file/README.md)
+- MinIO file storage: Replaces local file storage with MinIO cloud storage, automatically creating a 'eggshell-media' bucket for your media files. [README](backend/src/modules/minio-file/README.md)
 - Resend email integration [Watch setup video](https://youtu.be/pbdZm26YDpE?si=LQTHWeZMLD4w3Ahw) - special thanks to [aleciavogel](https://github.com/aleciavogel) for Resend notification service, and react-email implementation! [README](backend/src/modules/email-notifications/README.md)
 - Stripe payment service: [Watch setup video](https://youtu.be/dcSOpIzc1Og)
 - Meilisearch integration by [Rokmohar](https://github.com/rokmohar/medusa-plugin-meilisearch): Adds powerful product search capabilities to your store. When deployed on Railway using the template, MeiliSearch is automatically configured. (For non-railway'ers: [Watch setup video](https://youtu.be/hrXcc5MjApI))

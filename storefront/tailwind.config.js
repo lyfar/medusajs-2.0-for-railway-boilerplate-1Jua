@@ -1,5 +1,6 @@
 const path = require("path")
 
+/** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: "class",
   presets: [require("@medusajs/ui-preset")],
@@ -47,7 +48,8 @@ module.exports = {
         "8xl": "100rem",
       },
       screens: {
-        "2xsmall": "320px",
+        "2xsmall": "0.5rem",
+        "3xsmall": "0.25rem",
         xsmall: "512px",
         small: "1024px",
         medium: "1280px",

@@ -11,7 +11,22 @@ type ItemProps = {
 }
 
 const Item = ({ item }: ItemProps) => {
-  const designUrl = (item.metadata?.design_url as string) || null
+  const rawDesignUrl = (item.metadata?.design_url as string) || null
+  
+  // Fix malformed Cloudflare R2 URLs
+  const normalizeCloudflareUrl = (url: string) => {
+    // Check if URL has the malformed pattern: r2.devpk_
+    if (url.includes('r2.devpk_')) {
+      // Extract the filename from the end of the URL
+      const filename = url.split('/').pop()
+      // Replace the malformed part with correct structure
+      const baseUrl = url.split('r2.devpk_')[0] + 'r2.dev/'
+      return baseUrl + filename
+    }
+    return url
+  }
+  
+  const designUrl = rawDesignUrl ? normalizeCloudflareUrl(rawDesignUrl) : null
 
   return (
     <Table.Row className="w-full" data-testid="product-row">
@@ -36,14 +51,14 @@ const Item = ({ item }: ItemProps) => {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={designUrl}
-              alt="Sticker design preview"
-              className="w-12 h-12 object-cover border rounded-md"
+              alt="Custom sticker design"
+              className="w-12 h-12 object-cover border border-gray-600 rounded-md bg-gray-800"
             />
             <a
               href={designUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-ui-fg-interactive hover:underline"
+              className="text-sm text-blue-400 hover:text-blue-300 hover:underline"
             >
               View design
             </a>

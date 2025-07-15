@@ -13,6 +13,7 @@ type PaymentContainerProps = {
   selectedPaymentOptionId: string | null
   disabled?: boolean
   paymentInfoMap: Record<string, { title: string; icon: JSX.Element }>
+  children?: React.ReactNode
 }
 
 const PaymentContainer: React.FC<PaymentContainerProps> = ({
@@ -20,6 +21,7 @@ const PaymentContainer: React.FC<PaymentContainerProps> = ({
   selectedPaymentOptionId,
   paymentInfoMap,
   disabled = false,
+  children,
 }) => {
   const isDevelopment = process.env.NODE_ENV === "development"
 
@@ -30,9 +32,9 @@ const PaymentContainer: React.FC<PaymentContainerProps> = ({
         value={paymentProviderId}
         disabled={disabled}
         className={clx(
-          "flex flex-col gap-y-2 text-small-regular cursor-pointer py-4 border rounded-rounded px-8 mb-2 hover:shadow-borders-interactive-with-active",
+          "flex flex-col gap-y-2 text-small-regular cursor-pointer py-4 border rounded-rounded px-8 mb-2 hover:shadow-borders-interactive-with-active bg-gray-700 border-gray-600",
           {
-            "border-ui-border-interactive":
+            "border-blue-500":
               selectedPaymentOptionId === paymentProviderId,
           }
         )}
@@ -54,6 +56,7 @@ const PaymentContainer: React.FC<PaymentContainerProps> = ({
         {isManual(paymentProviderId) && isDevelopment && (
           <PaymentTest className="small:hidden text-[10px]" />
         )}
+        {children}
       </RadioGroup.Option>
     </>
   )

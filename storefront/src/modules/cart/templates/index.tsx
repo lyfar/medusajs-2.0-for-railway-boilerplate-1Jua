@@ -1,23 +1,25 @@
-import ItemsTemplate from "./items"
-import Summary from "./summary"
-import EmptyCartMessage from "../components/empty-cart-message"
-import SignInPrompt from "../components/sign-in-prompt"
+import { getCustomer } from "@lib/data/customer"
+import EmptyCartMessage from "@modules/cart/components/empty-cart-message"
+import SignInPrompt from "@modules/cart/components/sign-in-prompt"
+import ItemsTemplate from "@modules/cart/templates/items"
+import Summary from "@modules/cart/templates/summary"
 import Divider from "@modules/common/components/divider"
 import { HttpTypes } from "@medusajs/types"
 
-const CartTemplate = ({
-  cart,
-  customer,
+const CartTemplate = async ({
+  cart: cartProp,
 }: {
   cart: HttpTypes.StoreCart | null
-  customer: HttpTypes.StoreCustomer | null
 }) => {
+  const customer = await getCustomer()
+  const cart = cartProp
+
   return (
-    <div className="py-12">
+    <div className="py-12 bg-gray-900 dark:bg-black text-white">
       <div className="content-container" data-testid="cart-container">
         {cart?.items?.length ? (
-          <div className="grid grid-cols-1 small:grid-cols-[1fr_360px] gap-x-40">
-            <div className="flex flex-col py-6 gap-y-6">
+          <div className="grid grid-cols-1 small:grid-cols-[1fr_360px] gap-x-8">
+            <div className="flex flex-col bg-gray-800 dark:bg-black p-6 gap-y-6">
               {!customer && (
                 <>
                   <SignInPrompt />
@@ -29,7 +31,7 @@ const CartTemplate = ({
             <div className="relative">
               <div className="flex flex-col gap-y-8 sticky top-12">
                 {cart && cart.region && (
-                  <div className="bg-neutral-900 border border-neutral-800 p-6">
+                  <div className="bg-gray-800 dark:bg-black p-6">
                     <Summary cart={cart as any} />
                   </div>
                 )}
@@ -37,9 +39,7 @@ const CartTemplate = ({
             </div>
           </div>
         ) : (
-          <div>
-            <EmptyCartMessage />
-          </div>
+          <EmptyCartMessage />
         )}
       </div>
     </div>

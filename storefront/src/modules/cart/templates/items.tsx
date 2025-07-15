@@ -1,6 +1,6 @@
 import repeat from "@lib/util/repeat"
 import { HttpTypes } from "@medusajs/types"
-import { Heading, Table } from "@medusajs/ui"
+import { Heading } from "@medusajs/ui"
 
 import Item from "@modules/cart/components/item"
 import SkeletonLineItem from "@modules/skeletons/components/skeleton-line-item"
@@ -12,40 +12,46 @@ type ItemsTemplateProps = {
 
 const ItemsTemplate = ({ items, cart }: ItemsTemplateProps) => {
   const currencyCode = cart?.currency_code || "EUR"
-  
   return (
-    <div>
-      <div className="pb-3 flex items-center">
-        <Heading className="text-[2rem] leading-[2.75rem]">Cart</Heading>
+    <div className="bg-gray-800 dark:bg-black">
+      <div className="flex items-center mb-6 px-6">
+        <Heading className="text-xl-semi text-white">Cart</Heading>
       </div>
-      <Table>
-        <Table.Header className="border-t-0">
-          <Table.Row className="text-ui-fg-subtle txt-medium-plus">
-            <Table.HeaderCell className="!pl-0">Item</Table.HeaderCell>
-            <Table.HeaderCell></Table.HeaderCell>
-            <Table.HeaderCell>Quantity</Table.HeaderCell>
-            <Table.HeaderCell className="hidden small:table-cell">
-              Price
-            </Table.HeaderCell>
-            <Table.HeaderCell className="!pr-0 text-right">
-              Total
-            </Table.HeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {items
-            ? items
-                .sort((a, b) => {
-                  return (a.created_at ?? "") > (b.created_at ?? "") ? -1 : 1
-                })
-                .map((item) => {
-                  return <Item key={item.id} item={item} currencyCode={currencyCode} />
-                })
-            : repeat(5).map((i) => {
-                return <SkeletonLineItem key={i} />
-              })}
-        </Table.Body>
-      </Table>
+      
+      {/* Modern List Layout */}
+      <div className="flex flex-col">
+        {/* Top border */}
+        <div className="h-px bg-gray-600 dark:bg-gray-700 mb-0"></div>
+        
+        {items && cart
+          ? items
+              .sort((a, b) => {
+                return (a.created_at ?? 0) > (b.created_at ?? 0) ? -1 : 1
+              })
+              .map((item, index) => (
+                <div key={item.id}>
+                  <Item 
+                    item={item} 
+                    currencyCode={currencyCode} 
+                    type="full" 
+                    isLast={index === items.length - 1}
+                  />
+                  {/* Separator after each item except the last */}
+                  {index < items.length - 1 && (
+                    <div className="h-px bg-gray-600 dark:bg-gray-700"></div>
+                  )}
+                </div>
+              ))
+          : Array.from(Array(3).keys()).map((i) => (
+              <div key={i}>
+                <SkeletonLineItem />
+                {i < 2 && <div className="h-px bg-gray-600 dark:bg-gray-700"></div>}
+              </div>
+            ))}
+        
+        {/* Bottom border */}
+        <div className="h-px bg-gray-600 dark:bg-gray-700 mt-0"></div>
+      </div>
     </div>
   )
 }
