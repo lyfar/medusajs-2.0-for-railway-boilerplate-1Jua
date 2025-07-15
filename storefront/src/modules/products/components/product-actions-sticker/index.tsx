@@ -119,14 +119,13 @@ export default function ProductActionsSticker({
 
   return (
     <div className="w-full" ref={actionsRef}>
-      {/* Product Title */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">{product.title}</h1>
+      {/* Product Title - Removed for cleaner interface */}
+      <div className="text-center mb-4">
         <p className="text-lg text-neutral-400">{product.description}</p>
       </div>
 
-      {/* Sticker Calculator */}
-      <div className="mb-8">
+      {/* Sticker Calculator - Full height minus button */}
+      <div className="flex-1 min-h-[calc(100vh-200px)]">
         <Calculator
           onStateChange={handleCalculatorChange}
           disabled={!!disabled || isAdding}

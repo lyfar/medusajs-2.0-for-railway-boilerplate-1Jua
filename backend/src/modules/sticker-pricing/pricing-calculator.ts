@@ -35,7 +35,7 @@ export class StickerPricingCalculator {
     rectangle: { F_S: 100, k_S: 0.5, delta: 0.8 },
     square: { F_S: 100, k_S: 0.5, delta: 0.8 },
     circle: { F_S: 120, k_S: 0.6, delta: 0.8 },
-    diecut: { F_S: 150, k_S: 0.7, delta: 0.8 }
+    diecut: { F_S: 1500, k_S: 0.7, delta: 0.8 }
   };
 
   // Default dimensions for each shape (in cm)

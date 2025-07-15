@@ -86,6 +86,39 @@ Rename `.env.local.template` ->  `.env.local`
 `cd storefront/`
 `npm run dev` or `pnpm dev` will run the storefront on uncompiled code, with hot-reloading as files are saved with changes.
 
+## Sticker Calculator Configuration
+
+**⚠️ Security Note:** Pricing parameters are securely stored on the backend to prevent manipulation. Do not use frontend configuration for production.
+
+The sticker pricing uses a formula with three configurable parameters stored securely on the backend. To change these values, edit the backend configuration:
+
+**File:** `backend/src/modules/sticker-pricing/pricing-calculator.ts`
+
+**Line 34-39:**
+```typescript
+private readonly SHAPE_PRICING_PARAMS: Record<StickerShape, ShapePricingParams> = {
+  rectangle: { F_S: 100, k_S: 0.5, delta: 0.8 },
+  square: { F_S: 100, k_S: 0.5, delta: 0.8 },
+  circle: { F_S: 120, k_S: 0.6, delta: 0.8 },
+  diecut: { F_S: 150, k_S: 0.7, delta: 0.8 }
+};
+```
+
+### Parameters Explained:
+- **F_S (Fixed Cost)**: Base setup cost regardless of size (€ base cost)
+- **k_S (Variable Cost)**: Cost multiplier based on sticker area (€ per cm²)
+- **delta (Scaling Exponent)**: How price scales with quantity (bulk discount factor)
+
+### Formula Used:
+`Total Price = (F_S + k_S × Area) × (Quantity/500)^delta`
+
+### How it works:
+1. Frontend sends pricing requests to `/store/stickers/calculate-shape-pricing`
+2. Backend calculates prices using secure parameters
+3. Results are returned to frontend for display
+
+After making changes, restart the backend server for changes to take effect.
+
 ## Useful resources
 - How to setup credit card payment with Stripe payment module: https://youtu.be/dcSOpIzc1Og
 - https://funkyton.com/medusajs-2-0-is-finally-here/#succuessfully-deployed-whats-next
