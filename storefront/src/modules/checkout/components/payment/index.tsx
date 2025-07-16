@@ -44,9 +44,23 @@ const Payment = ({
     setError(null)
     setSelectedPaymentMethod(method)
     if (isStripeFunc(method)) {
-      await initiatePaymentSession(cart, {
-        provider_id: method,
-      })
+      setIsLoading(true)
+      if (process.env.NODE_ENV === "development") {
+        console.log("Payment - Initiating Stripe payment session for method:", method)
+      }
+      try {
+        await initiatePaymentSession(cart, {
+          provider_id: method,
+        })
+        if (process.env.NODE_ENV === "development") {
+          console.log("Payment - Payment session initiated successfully")
+        }
+      } catch (err) {
+        console.error("Payment - Failed to initiate payment session:", err)
+        setError(err instanceof Error ? err.message : "Failed to initialize payment")
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
@@ -155,7 +169,13 @@ const Payment = ({
                             <Text className="txt-medium-plus text-gray-300 mb-1">
                               Enter your card details:
                             </Text>
-                            {stripeKey ? (
+                            {isLoading ? (
+                              <div className="py-4 px-4 bg-gray-700 border border-gray-600 rounded-md">
+                                <Text className="text-gray-300 text-sm">
+                                  Initializing payment...
+                                </Text>
+                              </div>
+                            ) : activeSession && stripeKey ? (
                               <CardElement
                               options={{
                                 style: {
@@ -180,13 +200,19 @@ const Payment = ({
                                 setCardComplete(e.complete)
                               }}
                             />
-                            ) : (
+                            ) : !stripeKey ? (
                               <div className="py-4 px-4 bg-red-50 border border-red-200 rounded-md">
                                 <Text className="text-red-600 text-sm">
                                   Stripe is not configured. Please set NEXT_PUBLIC_STRIPE_KEY environment variable.
                                 </Text>
                               </div>
-                            )}
+                            ) : !activeSession ? (
+                              <div className="py-4 px-4 bg-gray-700 border border-gray-600 rounded-md">
+                                <Text className="text-gray-300 text-sm">
+                                  Please wait while we set up your payment...
+                                </Text>
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </PaymentContainer>

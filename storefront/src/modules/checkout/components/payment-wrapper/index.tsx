@@ -24,6 +24,14 @@ const Wrapper: React.FC<WrapperProps> = ({ cart, children }) => {
   const paymentSession = cart.payment_collection?.payment_sessions?.find(
     (s) => s.status === "pending"
   )
+  
+  // Debug logging to help troubleshoot payment wrapper
+  if (process.env.NODE_ENV === "development") {
+    console.log("PaymentWrapper - Payment sessions:", cart.payment_collection?.payment_sessions)
+    console.log("PaymentWrapper - Active session:", paymentSession)
+    console.log("PaymentWrapper - Session provider:", paymentSession?.provider_id)
+    console.log("PaymentWrapper - isStripe check:", isStripe(paymentSession?.provider_id))
+  }
 
   if (
     isStripe(paymentSession?.provider_id) &&

@@ -1,6 +1,5 @@
 import { listCartShippingMethods } from "@lib/data/fulfillment"
 import { listCartPaymentMethods } from "@lib/data/payment"
-import { getCustomer } from "@lib/data/customer"
 import Addresses from "@modules/checkout/components/addresses"
 import Payment from "@modules/checkout/components/payment"
 import Review from "@modules/checkout/components/review"
@@ -9,15 +8,16 @@ import Divider from "@modules/common/components/divider"
 import { HttpTypes } from "@medusajs/types"
 
 const CheckoutForm = async ({
-  cart: cartProp,
+  cart,
+  customer,
 }: {
   cart: HttpTypes.StoreCart | null
+  customer: HttpTypes.StoreCustomer | null
 }) => {
-  const cart = cartProp
   if (!cart) {
     return null
   }
-  const customer = await getCustomer()
+  
   const shippingMethods = await listCartShippingMethods(cart.id)
   const paymentMethods = await listCartPaymentMethods(cart.region?.id ?? "")
 
