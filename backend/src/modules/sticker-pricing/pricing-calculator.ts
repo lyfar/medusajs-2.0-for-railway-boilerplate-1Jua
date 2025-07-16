@@ -57,6 +57,25 @@ export class StickerPricingCalculator {
   ];
 
   /**
+   * Apply psychological pricing: round up to nearest 10, then subtract 1 for psychological effect
+   * Examples: 23.45 -> 29, 67.89 -> 69, 156.34 -> 159
+   * @param price - Original calculated price
+   * @returns Psychological price ending in 9
+   */
+  private applyPsychologicalPricing(price: number): number {
+    // Round up to nearest 10
+    const roundedUp = Math.ceil(price / 10) * 10;
+    
+    // Apply psychological pricing (subtract 1 to end in 9)
+    // Special case: if price would be 9 or less, keep it as is to avoid 0 or negative prices
+    if (roundedUp <= 10) {
+      return Math.max(roundedUp, price); // Don't go below original price for very low amounts
+    }
+    
+    return roundedUp - 1;
+  }
+
+  /**
    * Calculate area for a given shape and dimensions
    */
   private calculateArea(shape: StickerShape, dimensions: StickerDimensions): number {
@@ -116,7 +135,7 @@ export class StickerPricingCalculator {
     const scalingFactor = Math.pow(quantity / STICKER_MOQ, params.delta);
 
     // Calculate final prices
-    const totalPrice = Math.round((basePrice * scalingFactor) * 100) / 100;
+    const totalPrice = this.applyPsychologicalPricing(basePrice * scalingFactor);
     // Keep unit price precise to avoid rounding inconsistencies with total price
     const unitPrice = totalPrice / quantity;
 
@@ -158,7 +177,7 @@ export class StickerPricingCalculator {
 
     const appliedTier = this.findApplicableTier(quantity);
     const unitPrice = appliedTier.pricePerUnit;
-    const totalPrice = Math.round((unitPrice * quantity) * 100) / 100;
+    const totalPrice = this.applyPsychologicalPricing(unitPrice * quantity);
     const originalPrice = Math.round((this.DEFAULT_PRICING_TIERS[0].pricePerUnit * quantity) * 100) / 100;
     const savings = Math.round((originalPrice - totalPrice) * 100) / 100;
 
@@ -257,7 +276,7 @@ export class StickerPricingCalculator {
         };
       });
 
-    const totalStickerPrice = Math.round(stickerItems.reduce((sum, item) => sum + item.totalPrice, 0) * 100) / 100;
+    const totalStickerPrice = this.applyPsychologicalPricing(stickerItems.reduce((sum, item) => sum + item.totalPrice, 0));
     const totalOriginalPrice = stickerItems.reduce((sum, item) => 
       sum + (item.quantity * this.DEFAULT_PRICING_TIERS[0].pricePerUnit), 0
     );

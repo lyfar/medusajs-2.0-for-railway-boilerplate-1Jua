@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import { useEffect, useState } from 'react';
 import ImageDropZone from './image-drop-zone';
 import QuantitySelector from './quantity-selector';
-import ShapeSelector, { Shape, shapes } from './shape-selector';
+import { Shape, shapes } from './shape-selector';
 import SizeInput from './size-input';
 import { useShapeStickerPricing } from '@lib/hooks/use-shape-sticker-pricing';
 
@@ -77,15 +77,16 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
   }, [quantity, shape, dimensions, calculatePricing]);
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+    <div className="w-full max-w-[1600px] mx-auto px-4 py-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Left Column - Fixed Image Upload */}
         <div className="lg:col-span-1">
-          <div className="rounded-xl bg-neutral-900 p-2 border border-neutral-800 shadow-xl lg:sticky lg:top-4 h-[calc(100vh-8rem)] flex items-center justify-center">
+          <div className="rounded-xl bg-neutral-900 border border-neutral-800 shadow-xl lg:sticky lg:top-4 h-[calc(100vh-15rem)] p-4 flex flex-col">
             <ImageDropZone 
               shape={shape} 
               dimensions={dimensions} 
               onFileUpload={handleFileUpload}
+              onShapeChange={handleShapeChange}
               disabled={disabled}
               compact={false}
             />
@@ -93,12 +94,7 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
         </div>
 
         {/* Right Column - Scrollable Settings */}
-        <div className="lg:col-span-1 space-y-6 lg:h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-2">
-
-          <div>
-            <h3 className="mb-4 text-xl font-semibold text-white">Shape</h3>
-            <ShapeSelector selectedShape={shape} onShapeChange={handleShapeChange} />
-          </div>
+        <div className="lg:col-span-1 space-y-6 lg:h-[calc(100vh-15rem)] lg:overflow-y-auto lg:pr-2 py-4">
 
           <div>
             <h3 className="mb-4 text-xl font-semibold text-white">Size</h3>

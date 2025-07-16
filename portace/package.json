@@ -1,0 +1,23 @@
+{
+  "name": "sticker-potrace-service",
+  "version": "1.0.0",
+  "description": "Potrace-based service for generating crisp sticker outlines",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "potrace": "^2.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublish": "npm run clean && npm run build"
+  },
+  "keywords": ["sticker", "potrace", "svg", "outline", "die-cut"],
+  "author": "",
+  "license": "MIT"
+} 

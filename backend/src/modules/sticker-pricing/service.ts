@@ -8,6 +8,25 @@ class StickerPricingService extends MedusaService({
 }) {
   private calculator = new StickerPricingCalculator()
 
+  /**
+   * Apply psychological pricing: round up to nearest 10, then subtract 1 for psychological effect
+   * Examples: 23.45 -> 29, 67.89 -> 69, 156.34 -> 159
+   * @param price - Original calculated price
+   * @returns Psychological price ending in 9
+   */
+  private applyPsychologicalPricing(price: number): number {
+    // Round up to nearest 10
+    const roundedUp = Math.ceil(price / 10) * 10;
+    
+    // Apply psychological pricing (subtract 1 to end in 9)
+    // Special case: if price would be 9 or less, keep it as is to avoid 0 or negative prices
+    if (roundedUp <= 10) {
+      return Math.max(roundedUp, price); // Don't go below original price for very low amounts
+    }
+    
+    return roundedUp - 1;
+  }
+
   async calculatePricing(variantId: string, quantity: number) {
     // First check if this variant has custom configuration
     const config = await this.findStickerConfig(variantId)
@@ -72,8 +91,9 @@ class StickerPricingService extends MedusaService({
       throw new Error("No applicable pricing tier found")
     }
 
-    const unitPrice = applicableTier.pricePerUnit
-    const totalPrice = quantity * unitPrice
+    const originalUnitPrice = applicableTier.pricePerUnit
+    const totalPrice = this.applyPsychologicalPricing(quantity * originalUnitPrice)
+    const unitPrice = totalPrice / quantity // Recalculate unit price from psychological total
     const originalPrice = quantity * config.basePrice
     const savings = originalPrice - totalPrice
 

@@ -37,7 +37,7 @@ const ProductTemplate: React.FC<ProductTemplateProps> = ({
   if (hasStickerVariant) {
     return (
       <div className="min-h-screen bg-neutral-950">
-        <div className="w-full px-4 py-8">
+        <div className="w-full">
           <ProductActionsSticker product={product} region={region} />
         </div>
       </div>
