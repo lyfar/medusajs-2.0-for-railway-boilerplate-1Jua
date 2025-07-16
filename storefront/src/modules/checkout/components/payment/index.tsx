@@ -38,6 +38,7 @@ const Payment = ({
   const isOpen = searchParams.get("step") === "payment"
 
   const isStripe = isStripeFunc(selectedPaymentMethod)
+  const stripeKey = process.env.NEXT_PUBLIC_STRIPE_KEY
 
   const setPaymentMethod = async (method: string) => {
     setError(null)
@@ -154,7 +155,8 @@ const Payment = ({
                             <Text className="txt-medium-plus text-gray-300 mb-1">
                               Enter your card details:
                             </Text>
-                            <CardElement
+                            {stripeKey ? (
+                              <CardElement
                               options={{
                                 style: {
                                   base: {
@@ -178,6 +180,13 @@ const Payment = ({
                                 setCardComplete(e.complete)
                               }}
                             />
+                            ) : (
+                              <div className="py-4 px-4 bg-red-50 border border-red-200 rounded-md">
+                                <Text className="text-red-600 text-sm">
+                                  Stripe is not configured. Please set NEXT_PUBLIC_STRIPE_KEY environment variable.
+                                </Text>
+                              </div>
+                            )}
                           </div>
                         )}
                       </PaymentContainer>

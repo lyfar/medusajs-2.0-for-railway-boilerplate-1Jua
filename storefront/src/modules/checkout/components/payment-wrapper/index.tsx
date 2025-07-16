@@ -28,7 +28,8 @@ const Wrapper: React.FC<WrapperProps> = ({ cart, children }) => {
   if (
     isStripe(paymentSession?.provider_id) &&
     paymentSession &&
-    stripePromise
+    stripePromise &&
+    stripeKey
   ) {
     return (
       <StripeContext.Provider value={true}>
