@@ -13,34 +13,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  async headers() {
-    return [
-      {
-        // Apply CSP headers to all routes
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://m.stripe.network blob:",
-              "style-src 'self' 'unsafe-inline' https://js.stripe.com",
-              "img-src 'self' data: blob: https: http:",
-              "connect-src 'self' https://api.stripe.com https://r.stripe.com https://m.stripe.com https://m.stripe.network https://q.stripe.com",
-              "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
-              "font-src 'self' data:",
-              "media-src 'self' blob: data:",
-              "object-src 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "frame-ancestors 'none'",
-              "upgrade-insecure-requests"
-            ].join('; ')
-          }
-        ]
-      }
-    ]
-  },
   images: {
     remotePatterns: [
       {
