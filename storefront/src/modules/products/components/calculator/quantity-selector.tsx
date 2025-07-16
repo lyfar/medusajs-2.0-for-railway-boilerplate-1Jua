@@ -11,11 +11,11 @@ type QuantityOption = '500' | '1000' | '2000' | '5000' | 'Custom';
 
 // Predefined quantity options with marketing names
 const quantityMappings: Record<QuantityOption, { quantity: number | null, name: string, description: string }> = {
-  '500': { quantity: 500, name: 'Starter', description: '500 pcs • Testing' },
-  '1000': { quantity: 1000, name: 'Business', description: '1K pcs • Small batch' },
-  '2000': { quantity: 2000, name: 'Growth', description: '2K pcs • Scale up' },
-  '5000': { quantity: 5000, name: 'Volume', description: '5K pcs • Best value' },
-  'Custom': { quantity: null, name: 'Custom', description: 'Any quantity' }
+  '500': { quantity: 500, name: 'Starter', description: '500 pieces' },
+  '1000': { quantity: 1000, name: 'Business', description: '1,000 pieces' },
+  '2000': { quantity: 2000, name: 'Growth', description: '2,000 pieces' },
+  '5000': { quantity: 5000, name: 'Volume', description: '5,000 pieces' },
+  'Custom': { quantity: null, name: 'Custom', description: 'Set your quantity' }
 };
 
 export default function QuantitySelector({ onQuantityChange }: QuantitySelectorProps) {
