@@ -38,9 +38,9 @@ const medusaConfig = {
     redisUrl: REDIS_URL,
     workerMode: WORKER_MODE,
     http: {
-      adminCors: ADMIN_CORS,
-      authCors: AUTH_CORS,
-      storeCors: STORE_CORS,
+      adminCors: ADMIN_CORS || BACKEND_URL,
+      authCors: AUTH_CORS || BACKEND_URL,
+      storeCors: STORE_CORS || BACKEND_URL,
       jwtSecret: JWT_SECRET,
       cookieSecret: COOKIE_SECRET
     },
@@ -55,7 +55,7 @@ const medusaConfig = {
     }
   },
   admin: {
-    backendUrl: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000",
+    backendUrl: BACKEND_URL,
     disable: SHOULD_DISABLE_ADMIN,
   },
   modules: [
