@@ -3,8 +3,10 @@ import { Base } from './base'
 
 /**
  * The key for the InviteUserEmail template, used to identify it
+ * For SendGrid: Replace with your actual template ID (UUID) from SendGrid dashboard
+ * For Resend: Use string identifier like 'invite-user'
  */
-export const INVITE_USER = 'invite-user'
+export const INVITE_USER = 'invite-user' // For SendGrid, change to: 'd-1234567890abcdef'
 
 /**
  * The props for the InviteUserEmail template
