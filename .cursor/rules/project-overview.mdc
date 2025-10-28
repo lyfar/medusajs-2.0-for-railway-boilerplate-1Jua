@@ -30,6 +30,6 @@ We are building an e-commerce platform on **Medusa v2** (modular architecture) e
 - File uploads rely on **File Service** abstraction (compatible with R2).  
 - Pricing follows **Price Sets & Calculators** guidelines for custom products.
 
-> MCP: Medusa documentation is available through MCP Context 7 — consult it whenever deeper technical details are required.
+> MCP: Medusa documentation is available through MCP Context 7 — consult it whenever deeper technical details are required.    
 
 This rule provides high-level context so AI agents understand the domain, architecture, and where to look in the codebase.
