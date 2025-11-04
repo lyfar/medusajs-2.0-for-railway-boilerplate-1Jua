@@ -10,7 +10,7 @@ import SkeletonRelatedProducts from "@modules/skeletons/templates/skeleton-relat
 import { notFound } from "next/navigation"
 import ProductActionsWrapper from "./product-actions-wrapper"
 import { HttpTypes } from "@medusajs/types"
-import { isStickerVariant } from "@lib/util/sticker-utils"
+import { isStickerProduct } from "@lib/util/sticker-utils"
 import ProductActionsSticker from "@modules/products/components/product-actions-sticker"
 
 type ProductTemplateProps = {
@@ -29,15 +29,13 @@ const ProductTemplate: React.FC<ProductTemplateProps> = ({
   }
 
   // Check if this is a sticker product
-  const hasStickerVariant = product.variants?.some(variant => 
-    isStickerVariant(variant.id)
-  ) || false
+  const isSticker = isStickerProduct(product)
 
   // Full-screen sticker customization layout
-  if (hasStickerVariant) {
+  if (isSticker) {
     return (
-      <div className="min-h-screen bg-neutral-950">
-        <div className="w-full">
+      <div className="min-h-screen bg-ui-bg-base lg:min-h-[calc(100vh-4rem)] lg:overflow-hidden">
+        <div className="w-full lg:h-full">
           <ProductActionsSticker product={product} region={region} />
         </div>
       </div>

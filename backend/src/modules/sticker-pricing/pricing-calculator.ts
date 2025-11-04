@@ -27,15 +27,26 @@ export interface StickerDimensions {
   diameter?: number;
 }
 
+export type StickerShapeOverrides = Partial<Record<StickerShape, ShapePricingParams>>;
+
+export interface StickerPricingCalculatorOptions {
+  moq?: number;
+  pricingTiers?: PricingTier[];
+  shapeParams?: StickerShapeOverrides;
+  baseUnitPrice?: number;
+  stickerVariantIds?: string[];
+}
+
 export class StickerPricingCalculator {
-  private readonly DEFAULT_STICKER_VARIANT_ID = process.env.STICKER_VARIANT_ID || "variant_01K03CSEQN3W8F1CRXJFW7AZWV";
-  
-  // Shape-based pricing parameters
-  private readonly SHAPE_PRICING_PARAMS: Record<StickerShape, ShapePricingParams> = {
+  private readonly DEFAULT_STICKER_VARIANT_ID =
+    process.env.STICKER_VARIANT_ID || "variant_01K03CSEQN3W8F1CRXJFW7AZWV";
+
+  // Baseline shape parameters
+  private readonly BASE_SHAPE_PRICING_PARAMS: Record<StickerShape, ShapePricingParams> = {
     rectangle: { F_S: 100, k_S: 0.5, delta: 0.8 },
     square: { F_S: 100, k_S: 0.5, delta: 0.8 },
     circle: { F_S: 120, k_S: 0.6, delta: 0.8 },
-    diecut: { F_S: 1500, k_S: 0.7, delta: 0.8 }
+    diecut: { F_S: 1500, k_S: 0.7, delta: 0.8 },
   };
 
   // Default dimensions for each shape (in cm)
@@ -43,18 +54,65 @@ export class StickerPricingCalculator {
     rectangle: { width: 10, height: 6 },
     square: { width: 8, height: 8 },
     circle: { diameter: 10 },
-    diecut: { width: 10, height: 6 }
+    diecut: { width: 10, height: 6 },
   };
 
   // Legacy pricing tiers (kept for backward compatibility)
   private readonly DEFAULT_PRICING_TIERS: PricingTier[] = [
-    { minQuantity: 500, maxQuantity: 999, pricePerUnit: 0.50 },    // €0.50 each
-    { minQuantity: 1000, maxQuantity: 1999, pricePerUnit: 0.45 },  // €0.45 each
-    { minQuantity: 2000, maxQuantity: 4999, pricePerUnit: 0.40 },  // €0.40 each
-    { minQuantity: 5000, maxQuantity: 9999, pricePerUnit: 0.35 },  // €0.35 each
-    { minQuantity: 10000, maxQuantity: 19999, pricePerUnit: 0.30 }, // €0.30 each
-    { minQuantity: 20000, maxQuantity: null, pricePerUnit: 0.25 }   // €0.25 each (unlimited)
+    { minQuantity: 500, maxQuantity: 999, pricePerUnit: 0.5 },
+    { minQuantity: 1000, maxQuantity: 1999, pricePerUnit: 0.45 },
+    { minQuantity: 2000, maxQuantity: 4999, pricePerUnit: 0.4 },
+    { minQuantity: 5000, maxQuantity: 9999, pricePerUnit: 0.35 },
+    { minQuantity: 10000, maxQuantity: 19999, pricePerUnit: 0.3 },
+    { minQuantity: 20000, maxQuantity: null, pricePerUnit: 0.25 },
   ];
+
+  private readonly shapePricingParams: Record<StickerShape, ShapePricingParams>;
+  private readonly pricingTiers: PricingTier[];
+  private readonly moq: number;
+  private readonly baselineUnitPrice: number;
+  private readonly stickerVariantIds?: Set<string>;
+
+  constructor(options: StickerPricingCalculatorOptions = {}) {
+    this.moq = options.moq ?? STICKER_MOQ;
+    this.pricingTiers =
+      options.pricingTiers && options.pricingTiers.length
+        ? options.pricingTiers.map((tier) => ({
+            minQuantity: tier.minQuantity,
+            maxQuantity: tier.maxQuantity ?? null,
+            pricePerUnit: tier.pricePerUnit,
+          }))
+        : [...this.DEFAULT_PRICING_TIERS];
+
+    this.shapePricingParams = (Object.keys(this.BASE_SHAPE_PRICING_PARAMS) as StickerShape[]).reduce(
+      (acc, shape) => {
+        const baseParams = this.BASE_SHAPE_PRICING_PARAMS[shape];
+        const override = options.shapeParams?.[shape];
+
+        acc[shape] = override
+          ? {
+              F_S: override.F_S ?? baseParams.F_S,
+              k_S: override.k_S ?? baseParams.k_S,
+              delta: override.delta ?? baseParams.delta,
+            }
+          : { ...baseParams };
+
+        return acc;
+      },
+      {} as Record<StickerShape, ShapePricingParams>
+    );
+
+    const baseline =
+      options.baseUnitPrice ??
+      this.pricingTiers[0]?.pricePerUnit ??
+      this.DEFAULT_PRICING_TIERS[0].pricePerUnit;
+
+    this.baselineUnitPrice = baseline;
+
+    if (options.stickerVariantIds?.length) {
+      this.stickerVariantIds = new Set(options.stickerVariantIds);
+    }
+  }
 
   /**
    * Apply psychological pricing: round up to nearest 10, then subtract 1 for psychological effect
@@ -113,7 +171,7 @@ export class StickerPricingCalculator {
     dimensions: StickerDimensions;
   } {
     // Use shared validation logic
-    const validation = validateStickerQuantity(quantity);
+    const validation = validateStickerQuantity(quantity, this.moq);
     if (!validation.isValid) {
       throw new Error(validation.error || "Invalid quantity");
     }
@@ -126,13 +184,13 @@ export class StickerPricingCalculator {
     // Use provided dimensions or defaults
     const finalDimensions = dimensions || this.DEFAULT_DIMENSIONS[shape];
     const area = this.calculateArea(shape, finalDimensions);
-    const params = this.SHAPE_PRICING_PARAMS[shape];
+    const params = this.shapePricingParams[shape];
 
     // Calculate base price: F_S + k_S * area
     const basePrice = params.F_S + (params.k_S * area);
 
     // Calculate scaling factor: (quantity / 500) ^ delta
-    const scalingFactor = Math.pow(quantity / STICKER_MOQ, params.delta);
+    const scalingFactor = Math.pow(quantity / this.moq, params.delta);
 
     // Calculate final prices
     const totalPrice = this.applyPsychologicalPricing(basePrice * scalingFactor);
@@ -165,7 +223,7 @@ export class StickerPricingCalculator {
     originalPrice: number;
   } {
     // Use shared validation logic
-    const validation = validateStickerQuantity(quantity);
+    const validation = validateStickerQuantity(quantity, this.moq);
     if (!validation.isValid) {
       throw new Error(validation.error || "Invalid quantity");
     }
@@ -178,7 +236,7 @@ export class StickerPricingCalculator {
     const appliedTier = this.findApplicableTier(quantity);
     const unitPrice = appliedTier.pricePerUnit;
     const totalPrice = this.applyPsychologicalPricing(unitPrice * quantity);
-    const originalPrice = Math.round((this.DEFAULT_PRICING_TIERS[0].pricePerUnit * quantity) * 100) / 100;
+    const originalPrice = Math.round((this.baselineUnitPrice * quantity) * 100) / 100;
     const savings = Math.round((originalPrice - totalPrice) * 100) / 100;
 
     return {
@@ -194,42 +252,51 @@ export class StickerPricingCalculator {
    * Check if a variant ID is a sticker variant
    */
   isStickerVariant(variantId: string): boolean {
-    return variantId === this.DEFAULT_STICKER_VARIANT_ID;
+    if (this.stickerVariantIds) {
+      return this.stickerVariantIds.has(variantId);
+    }
+
+    // Default behaviour falls back to environment variable-based id
+    if (this.DEFAULT_STICKER_VARIANT_ID) {
+      return variantId === this.DEFAULT_STICKER_VARIANT_ID;
+    }
+
+    return true;
   }
 
   /**
    * Get the minimum order quantity
    */
   getMOQ(): number {
-    return STICKER_MOQ;
+    return this.moq;
   }
 
   /**
    * Validate quantity against MOQ
    */
   validateQuantity(quantity: number): { isValid: boolean; error?: string } {
-    return validateStickerQuantity(quantity);
+    return validateStickerQuantity(quantity, this.moq);
   }
 
   /**
    * Get all pricing tiers (legacy)
    */
   getPricingTiers(): PricingTier[] {
-    return [...this.DEFAULT_PRICING_TIERS];
+    return [...this.pricingTiers];
   }
 
   /**
    * Get shape pricing parameters
    */
   getShapePricingParams(shape: StickerShape): ShapePricingParams {
-    return { ...this.SHAPE_PRICING_PARAMS[shape] };
+    return { ...this.shapePricingParams[shape] };
   }
 
   /**
    * Get all available shapes with their pricing parameters
    */
   getAllShapePricingParams(): Record<StickerShape, ShapePricingParams> {
-    return { ...this.SHAPE_PRICING_PARAMS };
+    return { ...this.shapePricingParams };
   }
 
   /**
@@ -243,10 +310,10 @@ export class StickerPricingCalculator {
    * Find the applicable pricing tier for a given quantity (legacy)
    */
   private findApplicableTier(quantity: number): PricingTier {
-    return this.DEFAULT_PRICING_TIERS.find(tier => 
+    return this.pricingTiers.find(tier => 
       quantity >= tier.minQuantity && 
       (tier.maxQuantity === null || quantity <= tier.maxQuantity)
-    ) || this.DEFAULT_PRICING_TIERS[0];
+    ) || this.pricingTiers[0];
   }
 
   /**
@@ -276,9 +343,12 @@ export class StickerPricingCalculator {
         };
       });
 
-    const totalStickerPrice = this.applyPsychologicalPricing(stickerItems.reduce((sum, item) => sum + item.totalPrice, 0));
-    const totalOriginalPrice = stickerItems.reduce((sum, item) => 
-      sum + (item.quantity * this.DEFAULT_PRICING_TIERS[0].pricePerUnit), 0
+    const totalStickerPrice = this.applyPsychologicalPricing(
+      stickerItems.reduce((sum, item) => sum + item.totalPrice, 0)
+    );
+    const totalOriginalPrice = stickerItems.reduce(
+      (sum, item) => sum + (item.quantity * this.baselineUnitPrice),
+      0
     );
     const totalSavings = Math.round((totalOriginalPrice - totalStickerPrice) * 100) / 100;
 

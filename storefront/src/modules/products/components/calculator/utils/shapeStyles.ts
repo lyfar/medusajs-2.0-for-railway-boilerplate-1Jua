@@ -1,3 +1,4 @@
+import { CSSProperties } from 'react'
 import { Shape } from '../shape-selector'
 
 export interface Dimensions {
@@ -6,17 +7,16 @@ export interface Dimensions {
   diameter?: number
 }
 
-export interface ContainerStyles {
-  width: string
-  height: string
+export type ContainerStyles = CSSProperties & {
   position: 'relative'
-  overflow: 'visible'
 }
 
 export interface ShapeStyleConfig {
   containerStyles: ContainerStyles
   clipPath?: string
   borderRadius?: string
+  pixelWidth: number
+  pixelHeight: number
 }
 
 /**
@@ -28,72 +28,103 @@ export function getContainerStyles(
   compact: boolean = false,
   hasImage: boolean = false
 ): ShapeStyleConfig {
-  // Fixed maximum dimensions for consistent layout
-  const maxWidth = compact ? 200 : 400
-  const maxHeight = compact ? 150 : 300
-  const minSize = compact ? 100 : 150
-  let width: number
-  let height: number
-
-  if (shape === "circle" && dimensions.diameter) {
-    width = height = Math.min(
-      maxWidth,
-      maxHeight,
-      Math.max(minSize, dimensions.diameter * (compact ? 15 : 25))
-    )
-  } else if (shape === "square") {
-    width = height = Math.min(
-      maxWidth,
-      maxHeight,
-      Math.max(minSize, (dimensions.width || 8) * (compact ? 15 : 25))
-    )
-  } else if (shape === "rectangle" || shape === "diecut") {
-    if (dimensions.width && dimensions.height) {
-      const aspectRatio = dimensions.width / dimensions.height
-
-      // Calculate optimal size within constraints
-      const baseWidth = Math.max(
-        minSize,
-        dimensions.width * (compact ? 15 : 25)
-      )
-      const baseHeight = Math.max(
-        minSize,
-        dimensions.height * (compact ? 15 : 25)
-      )
-
-      // Fit within container bounds
-      width = Math.min(baseWidth, maxWidth, maxHeight * aspectRatio)
-      height = width / aspectRatio
-
-      if (height > maxHeight || height < minSize) {
-        height = Math.min(
-          maxHeight,
-          Math.max(minSize, dimensions.height * (compact ? 15 : 25))
-        )
-        width = height * aspectRatio
-        if (width > maxWidth) {
-          width = maxWidth
-          height = width / aspectRatio
-        }
-      }
-    } else {
-      width = Math.min(maxWidth, maxHeight)
-      height = Math.min(maxWidth, maxHeight)
-    }
-  } else {
-    width = Math.min(maxWidth, maxHeight)
-    height = Math.min(maxWidth, maxHeight)
+  const fallback = {
+    width: dimensions.width ?? dimensions.diameter ?? 10,
+    height: dimensions.height ?? dimensions.diameter ?? 10,
   }
 
-  // Ensure minimum size and add responsive constraints
-  width = Math.max(width, compact ? 100 : 150)
-  height = Math.max(height, compact ? 100 : 150)
+  let widthCm: number
+  let heightCm: number
+
+  switch (shape) {
+    case "circle":
+      widthCm = heightCm = dimensions.diameter ?? Math.max(fallback.width, fallback.height)
+      break
+    case "square":
+      widthCm = heightCm = dimensions.width ?? fallback.width
+      break
+    case "rectangle":
+    case "diecut":
+      widthCm = dimensions.width ?? fallback.width
+      heightCm = dimensions.height ?? fallback.height
+      break
+    default:
+      widthCm = fallback.width
+      heightCm = fallback.height
+  }
+
+  // Prevent zero dimensions
+  widthCm = Math.max(widthCm, 1)
+  heightCm = Math.max(heightCm, 1)
+
+  const aspectRatio = widthCm / heightCm
+  const maxBounding = compact ? 280 : 500
+  const minBounding = compact ? 180 : 280
+
+  let pixelWidth: number
+  let pixelHeight: number
+
+  // For square and circle, ALWAYS enforce equal dimensions regardless of input
+  if (shape === "circle" || shape === "square") {
+    // Use the larger dimension or diameter for sizing
+    const baseDimension = shape === "circle" 
+      ? (dimensions.diameter || 10)
+      : Math.max(widthCm, heightCm)
+    
+    // Calculate size based on the base dimension but cap it
+    const scaleFactor = Math.min(maxBounding / baseDimension, maxBounding / 10)
+    const size = Math.min(Math.max(baseDimension * 40, minBounding), maxBounding)
+    
+    pixelWidth = size
+    pixelHeight = size
+  } else {
+    // For rectangles, maintain aspect ratio but constrain to screen
+    const scaleFactor = Math.min(
+      maxBounding / Math.max(widthCm, heightCm),
+      500 / Math.max(widthCm, heightCm)
+    )
+    
+    pixelWidth = widthCm * scaleFactor
+    pixelHeight = heightCm * scaleFactor
+    
+    // Ensure minimums
+    if (pixelWidth < minBounding * 0.5) {
+      const scale = (minBounding * 0.5) / pixelWidth
+      pixelWidth = minBounding * 0.5
+      pixelHeight = pixelHeight * scale
+    }
+    if (pixelHeight < minBounding * 0.5) {
+      const scale = (minBounding * 0.5) / pixelHeight
+      pixelHeight = minBounding * 0.5
+      pixelWidth = pixelWidth * scale
+    }
+    
+    // Cap maximums
+    if (pixelWidth > 600) {
+      const scale = 600 / pixelWidth
+      pixelWidth = 600
+      pixelHeight = pixelHeight * scale
+    }
+    if (pixelHeight > 500) {
+      const scale = 500 / pixelHeight
+      pixelHeight = 500
+      pixelWidth = pixelWidth * scale
+    }
+  }
+
+  pixelWidth = Math.round(pixelWidth)
+  pixelHeight = Math.round(pixelHeight)
 
   const containerStyles: ContainerStyles = {
-    width: `${width}px`,
-    height: `${height}px`,
+    width: shape === "circle" || shape === "square" ? `${pixelWidth}px` : "100%",
+    height: shape === "circle" || shape === "square" ? `${pixelHeight}px` : "auto",
+    maxWidth: `${pixelWidth}px`,
+    maxHeight: `${pixelHeight}px`,
+    minWidth: "0px",
+    aspectRatio: shape === "circle" || shape === "square" ? "1 / 1" : `${pixelWidth} / ${pixelHeight}`,
     position: "relative",
-    overflow: "visible", // Allow outline to spill
+    overflow: "hidden",
+    flexShrink: 0,
   }
 
   // Generate shape-specific styles
@@ -121,6 +152,8 @@ export function getContainerStyles(
     containerStyles,
     clipPath,
     borderRadius,
+    pixelWidth,
+    pixelHeight,
   }
 }
 

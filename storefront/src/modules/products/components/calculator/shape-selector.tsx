@@ -46,26 +46,35 @@ function RectangleIcon({ className }: { className?: string }) {
 export default function ShapeSelector({ selectedShape, onShapeChange }: ShapeSelectorProps) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {shapes.map((shape) => {
           const Icon = shape.icon;
+          const isSelected = selectedShape === shape.value;
           return (
             <button
               key={shape.value}
               onClick={() => onShapeChange(shape.value)}
               className={clsx(
-                'rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center justify-between',
-                {
-                  'bg-neutral-800 text-white border border-neutral-700': selectedShape === shape.value,
-                  'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:bg-neutral-800': selectedShape !== shape.value
-                }
+                "flex h-full w-full flex-col items-center justify-center gap-2 rounded-rounded border px-4 py-3 text-sm font-medium transition-colors",
+                isSelected
+                  ? "border-ui-border-strong bg-ui-bg-field text-ui-fg-base shadow-elevation-card-hover"
+                  : "border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-base hover:text-ui-fg-base"
               )}
             >
-              <span>{shape.label}</span>
-              <Icon className={clsx('h-6 w-6 ml-2', {
-                'text-white': selectedShape === shape.value,
-                'text-neutral-500': selectedShape !== shape.value
-              })} />
+              <Icon
+                className={clsx(
+                  "h-8 w-8",
+                  isSelected ? "text-ui-fg-base" : "text-ui-fg-subtle"
+                )}
+              />
+              <span
+                className={clsx(
+                  "text-xs",
+                  isSelected ? "text-ui-fg-base" : "text-ui-fg-subtle"
+                )}
+              >
+                {shape.label}
+              </span>
             </button>
           );
         })}

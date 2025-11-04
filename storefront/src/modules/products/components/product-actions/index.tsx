@@ -13,7 +13,7 @@ import MobileActions from "./mobile-actions"
 import ProductPrice from "../product-price"
 import { addToCart, addStickerToCart } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
-import { isStickerVariant, STICKER_MOQ } from "@lib/util/sticker-utils"
+import { isStickerProduct, STICKER_MOQ } from "@lib/util/sticker-utils"
 import { useStickerPricing } from "@lib/hooks/use-sticker-pricing"
 import StickerPricingDisplay from "../sticker-pricing"
 import StickerQuantitySelector from "../sticker-pricing/quantity-selector"
@@ -65,8 +65,8 @@ export default function ProductActions({
     })
   }, [product.variants, options])
 
-  // Check if this is a sticker variant
-  const isSticker = selectedVariant ? isStickerVariant(selectedVariant.id) : false
+  // Check if this is a sticker product
+  const isSticker = isStickerProduct(product)
 
   // Use sticker pricing hook for stickers
   const {

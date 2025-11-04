@@ -10,7 +10,10 @@ export interface ValidationResult {
  * @param quantity - The quantity to validate
  * @returns ValidationResult object
  */
-export function validateStickerQuantity(quantity: number): ValidationResult {
+export function validateStickerQuantity(
+  quantity: number,
+  moq: number = STICKER_MOQ
+): ValidationResult {
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return {
       isValid: false,
@@ -18,10 +21,10 @@ export function validateStickerQuantity(quantity: number): ValidationResult {
     };
   }
 
-  if (quantity < STICKER_MOQ) {
+  if (quantity < moq) {
     return {
       isValid: false,
-      error: `Minimum order quantity is ${STICKER_MOQ.toLocaleString()} stickers`
+      error: `Minimum order quantity is ${moq.toLocaleString()} stickers`
     };
   }
 
@@ -34,10 +37,11 @@ export function validateStickerQuantity(quantity: number): ValidationResult {
  * @returns ValidationResult object
  */
 export function validateCartStickerQuantities(
-  cartItems: Array<{ variantId: string; quantity: number }>
+  cartItems: Array<{ variantId: string; quantity: number }>,
+  moq: number = STICKER_MOQ
 ): ValidationResult {
   for (const item of cartItems) {
-    const validation = validateStickerQuantity(item.quantity);
+    const validation = validateStickerQuantity(item.quantity, moq);
     if (!validation.isValid) {
       return {
         isValid: false,

@@ -1,506 +1,1945 @@
 "use client"
 
-import React from "react"
 import clsx from "clsx"
 import {
-  Upload,
-  Check,
   AlertCircle,
-  Minus,
-  Plus,
+  Check,
+  Info,
+  RefreshCcw,
+  Upload,
+  Undo2,
+  Redo2,
+  MousePointerClick,
+  ZoomIn,
+  RotateCw,
+  Move,
 } from "lucide-react"
-import Image from "next/image"
-import { useCallback, useState, useMemo, useEffect } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+  type CSSProperties,
+} from "react"
 import { useDropzone } from "react-dropzone"
+
 import { Shape } from "./shape-selector"
 import { useImageUpload, useTransparencyCheck } from "./hooks"
-import { getContainerStyles, getCutLineStyles, getSafetyMarginStyles } from "./utils/shapeStyles"
-import { 
-  DesignZoomTool, 
-  ShapeSelectorTool, 
-  BackgroundToggleTool, 
-  CutlinesToggleTool 
-} from "./tools"
+import { getContainerStyles } from "./utils/shapeStyles"
+import { DesignZoomTool } from "./tools"
+import { Dimensions } from "./types"
+import { DesignDraftState, StoredUploadPreviewKind, fileToDataUrl } from "./utils/design-storage"
+import { SIZE_PRESETS, SizeDimensions, SizePresetKey } from "./size-presets"
+import { supportsOrientation, deriveOrientation, type Orientation } from "./orientation"
 
 interface ImageDropZoneProps {
   shape: Shape
-  dimensions: {
-    width?: number
-    height?: number
-    diameter?: number
-  }
-  onFileUpload?: (fileKey: string, publicUrl: string) => void
-  onShapeChange?: (shape: Shape) => void
+  dimensions: Dimensions
+  onDesignChange?: (state: DesignDraftState | null) => void
   disabled?: boolean
   compact?: boolean
+  onAutoConfigure?: (suggestion: AutoConfigureSuggestion) => void
+  orientation?: Orientation
+  onOrientationChange?: (orientation: Orientation) => void
 }
 
-export default function ImageDropZone({
-  shape,
-  dimensions,
-  onFileUpload,
-  onShapeChange,
-  disabled,
-  compact = false,
-}: ImageDropZoneProps) {
-  const [image, setImage] = useState<string | null>(null)
-  const [fileType, setFileType] = useState<string | null>(null)
-  const [scale, setScale] = useState(1) // Design zoom (image inside sticker)
-  const [stickerZoom, setStickerZoom] = useState(1) // Sticker zoom (entire sticker view)
-  const [showCutlines, setShowCutlines] = useState(true)
-  const [backgroundMode, setBackgroundMode] = useState<'auto' | 'light' | 'dark'>('auto')
-  const [isImageDark, setIsImageDark] = useState(false)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+export interface ImageDropZoneHandle {
+  saveDesign: () => Promise<void>
+  isSavingDesign: boolean
+}
 
-  // Use our custom hooks
-  const { uploadError, uploadSuccess, isUploading, handleDrop } = useImageUpload({
-    onFileUpload,
-    disabled,
+export type AutoConfigureSuggestion = {
+  shape: Shape
+  dimensions: Dimensions
+  presetKey?: SizePresetKey | "Custom"
+  orientation?: Orientation
+}
+
+type UploadPreviewKind = StoredUploadPreviewKind
+
+interface Point {
+  x: number
+  y: number
+}
+
+interface ImageMeta {
+  width: number
+  height: number
+}
+
+interface BaseTransform {
+  pointerId: number
+  target: Element
+}
+
+type ActiveTransform =
+  | null
+  | (BaseTransform & {
+      type: "scale"
+      initialScale: number
+      initialDistance: number
+    })
+  | (BaseTransform & {
+      type: "rotate"
+      initialRotation: number
+      initialAngle: number
+    })
+
+const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
+  "image/png": [".png"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/gif": [".gif"],
+  "image/svg+xml": [".svg"],
+  "application/pdf": [".pdf"],
+  "application/postscript": [".ai", ".eps"],
+  "application/illustrator": [".ai"],
+}
+
+const PRESET_MATCH_TOLERANCE = 0.08
+const SQUARE_THRESHOLD = 0.05
+const CUSTOM_BASE_AREA_CM2 = 60
+const ROUND_STEP = 0.5
+
+const shapePriorityDefault: Record<Shape, number> = {
+  square: 0,
+  rectangle: 1,
+  diecut: 2,
+  circle: 3,
+}
+
+const shapePriorityTransparent: Record<Shape, number> = {
+  circle: 0,
+  diecut: 1,
+  square: 2,
+  rectangle: 3,
+}
+
+const getNormalizedRatio = (width: number, height: number) => {
+  const larger = Math.max(width, height)
+  const smaller = Math.max(1, Math.min(width, height))
+  return larger / smaller
+}
+
+const getPresetRatio = (dimensions: SizeDimensions) => {
+  if (dimensions.diameter) {
+    return 1
+  }
+  if (!dimensions.width || !dimensions.height) {
+    return null
+  }
+  const larger = Math.max(dimensions.width, dimensions.height)
+  const smaller = Math.max(0.1, Math.min(dimensions.width, dimensions.height))
+  return larger / smaller
+}
+
+const orientDimensions = (
+  dimensions: SizeDimensions,
+  isLandscape: boolean
+): Dimensions => {
+  if (dimensions.diameter) {
+    return { diameter: dimensions.diameter }
+  }
+
+  if (!dimensions.width || !dimensions.height) {
+    return {}
+  }
+
+  const presetIsLandscape = dimensions.width >= dimensions.height
+  if (presetIsLandscape === isLandscape) {
+    return { width: dimensions.width, height: dimensions.height }
+  }
+
+  return { width: dimensions.height, height: dimensions.width }
+}
+
+const roundDimension = (value: number) => {
+  const rounded = Math.round((value / ROUND_STEP)) * ROUND_STEP
+  return Math.min(50, Math.max(1, Number(rounded.toFixed(2))))
+}
+
+const computeCustomSuggestion = (
+  width: number,
+  height: number,
+  hasTransparency: boolean
+): AutoConfigureSuggestion => {
+  const normalizedRatio = getNormalizedRatio(width, height)
+  const isLandscape = width >= height
+  const nearSquare = Math.abs(normalizedRatio - 1) <= SQUARE_THRESHOLD
+
+  if (hasTransparency && nearSquare) {
+    const diameter = roundDimension(Math.sqrt((CUSTOM_BASE_AREA_CM2 * 4) / Math.PI))
+    return {
+      shape: "circle",
+      dimensions: { diameter },
+      presetKey: "Custom",
+      orientation: "portrait",
+    }
+  }
+
+  const baseShape: Shape = hasTransparency
+    ? (nearSquare ? "circle" : "diecut")
+    : (nearSquare ? "square" : "rectangle")
+
+  if (baseShape === "circle") {
+    const diameter = roundDimension(Math.sqrt((CUSTOM_BASE_AREA_CM2 * 4) / Math.PI))
+    return {
+      shape: "circle",
+      dimensions: { diameter },
+      presetKey: "Custom",
+      orientation: "landscape",
+    }
+  }
+
+  const longSide = Math.sqrt(CUSTOM_BASE_AREA_CM2 * normalizedRatio)
+  const shortSide = CUSTOM_BASE_AREA_CM2 / longSide
+
+  const roundedLong = roundDimension(longSide)
+  const roundedShort = roundDimension(shortSide)
+
+  const dimensions = isLandscape
+    ? { width: roundedLong, height: roundedShort }
+    : { width: roundedShort, height: roundedLong }
+
+  return {
+    shape: baseShape,
+    dimensions,
+    presetKey: "Custom",
+    orientation: isLandscape ? "landscape" : "portrait",
+  }
+}
+
+const computePresetSuggestion = (
+  width: number,
+  height: number,
+  hasTransparency: boolean
+): AutoConfigureSuggestion | null => {
+  const isLandscape = width >= height
+  const normalizedRatio = getNormalizedRatio(width, height)
+  const priorities = hasTransparency ? shapePriorityTransparent : shapePriorityDefault
+
+  let bestSuggestion: AutoConfigureSuggestion | null = null
+  let bestDiff = Number.POSITIVE_INFINITY
+  let bestPriority = Number.POSITIVE_INFINITY
+
+  const shapeEntries = Object.entries(SIZE_PRESETS) as Array<[
+    Shape,
+    Record<SizePresetKey, SizeDimensions>
+  ]>
+
+  for (const [shape, presets] of shapeEntries) {
+    const priority = priorities[shape] ?? Number.MAX_SAFE_INTEGER
+    const presetEntries = Object.entries(presets) as Array<[SizePresetKey, SizeDimensions]>
+
+    for (const [presetKey, presetDimensions] of presetEntries) {
+      const presetRatio = getPresetRatio(presetDimensions)
+      if (!presetRatio) {
+        continue
+      }
+
+      const diff = Math.abs(normalizedRatio - presetRatio)
+      if (diff > PRESET_MATCH_TOLERANCE) {
+        continue
+      }
+
+      if (
+        !bestSuggestion ||
+        diff < bestDiff - 0.01 ||
+        (Math.abs(diff - bestDiff) <= 0.01 && priority < bestPriority)
+      ) {
+        bestDiff = diff
+        bestPriority = priority
+        bestSuggestion = {
+          shape,
+          dimensions: orientDimensions(presetDimensions, isLandscape),
+          presetKey,
+          orientation: isLandscape ? "landscape" : "portrait",
+        }
+      }
+    }
+  }
+
+  return bestSuggestion
+}
+
+const deriveAutoConfigureSuggestion = async (
+  dataUrl: string,
+  fileType: string,
+  checkTransparency: (img: HTMLImageElement, type: string) => boolean
+): Promise<AutoConfigureSuggestion | null> => {
+  try {
+    const img = await loadImage(dataUrl)
+    const naturalWidth = img.naturalWidth || img.width
+    const naturalHeight = img.naturalHeight || img.height
+    if (!naturalWidth || !naturalHeight) {
+      return null
+    }
+
+    const hasTransparency = checkTransparency(img, fileType)
+    const presetMatch = computePresetSuggestion(naturalWidth, naturalHeight, hasTransparency)
+    if (presetMatch) {
+      return presetMatch
+    }
+
+    return computeCustomSuggestion(naturalWidth, naturalHeight, hasTransparency)
+  } catch (error) {
+    console.warn("Failed to derive auto configuration from image", error)
+    return null
+  }
+}
+
+const MIN_PPI_WARNING = 200
+const PREFERRED_PPI = 300
+const PDFJS_CDN_VERSION = "5.4.394"
+
+let pdfjsLibLoader: Promise<any> | null = null
+
+const loadPdfJsFromCdn = () =>
+  new Promise<any>((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("PDF.js CDN fallback is only available in the browser"))
+      return
+    }
+
+    const existing = (window as any).pdfjsLib
+    if (existing) {
+      if (existing.GlobalWorkerOptions) {
+        existing.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${existing.version}/pdf.worker.min.js`
+      }
+      resolve(existing)
+      return
+    }
+
+    const script = document.createElement("script")
+    script.src = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_CDN_VERSION}/pdf.min.js`
+    script.async = true
+    script.onload = () => {
+      const pdfjs = (window as any).pdfjsLib
+      if (!pdfjs) {
+        reject(new Error("PDF.js failed to load from CDN"))
+        return
+      }
+      if (pdfjs.GlobalWorkerOptions) {
+        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+      }
+      resolve(pdfjs)
+    }
+    script.onerror = () => {
+      reject(new Error("Unable to load PDF.js from CDN"))
+    }
+
+    document.head.appendChild(script)
   })
 
-  const { hasTransparency } = useTransparencyCheck({
-    imageDataUrl: image,
+const loadPdfJs = async () => {
+  if (!pdfjsLibLoader) {
+    pdfjsLibLoader = import("pdfjs-dist/legacy/build/pdf.mjs")
+      .then((module) => {
+        const pdfjs = module
+        if (pdfjs.GlobalWorkerOptions) {
+          pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+        }
+        return pdfjs
+      })
+      .catch((error) => {
+        console.warn("Local PDF.js import failed, falling back to CDN", error)
+        pdfjsLibLoader = loadPdfJsFromCdn()
+        return pdfjsLibLoader
+      })
+  }
+
+  return pdfjsLibLoader
+}
+
+function preparePdfData(arrayBuffer: ArrayBuffer): Uint8Array | null {
+  // Try to extract PDF data from potentially wrapped formats
+  try {
+    const bytes = new Uint8Array(arrayBuffer)
+    // Look for PDF header "%PDF-"
+    for (let i = 0; i < Math.min(1024, bytes.length - 5); i++) {
+      if (
+        bytes[i] === 0x25 && // %
+        bytes[i + 1] === 0x50 && // P
+        bytes[i + 2] === 0x44 && // D
+        bytes[i + 3] === 0x46 && // F
+        bytes[i + 4] === 0x2d // -
+      ) {
+        return bytes.slice(i)
+      }
+    }
+  } catch (error) {
+    console.error("Failed to prepare PDF data:", error)
+  }
+  return null
+}
+
+async function convertPdfToImage(file: File): Promise<string | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer()
+    const { pdfjsLib, pdf } = await loadPdfDocument(arrayBuffer)
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 2 })
+    const canvas = document.createElement("canvas")
+    const context = canvas.getContext("2d")
+    if (!context) return null
+
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+
+    await page.render({
+      canvasContext: context,
+      viewport,
+    }).promise
+
+    return canvas.toDataURL("image/png")
+  } catch (error) {
+    console.error("PDF conversion failed:", error)
+    return null
+  }
+}
+
+async function convertVectorToImage(_file: File): Promise<string | null> {
+  // Vector conversion would require additional libraries
+  // For now, return null to indicate unsupported
+  console.warn("Vector file conversion not yet implemented")
+  return null
+}
+
+const loadPdfDocument = async (arrayBuffer: ArrayBuffer) => {
+  const pdfjsLib = await loadPdfJs()
+  const initialData = new Uint8Array(arrayBuffer)
+
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: initialData }).promise
+    return { pdfjsLib, pdf }
+  } catch (initialError) {
+    const extracted = preparePdfData(arrayBuffer)
+    if (!extracted) {
+      throw initialError
+    }
+
+    const pdf = await pdfjsLib.getDocument({ data: extracted }).promise
+    return { pdfjsLib, pdf }
+  }
+}
+
+const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(function ImageDropZone({
+  shape,
+  dimensions,
+  onDesignChange,
+  disabled,
+  compact = false,
+  onAutoConfigure,
+  orientation,
+  onOrientationChange,
+}, ref) {
+  const [imageData, setImageData] = useState<string | null>(null)
+  const [fileType, setFileType] = useState<string | null>(null)
+  const [previewKind, setPreviewKind] = useState<UploadPreviewKind>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [isImageDark, setIsImageDark] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
+  const [resolutionWarning, setResolutionWarning] = useState<
+    | null
+    | {
+        detectedPpi: number
+        recommended: number
+      }
+  >(null)
+  const [isSavingDesign, setIsSavingDesign] = useState(false)
+  const [isImageSelected, setIsImageSelected] = useState(false)
+
+  const [scale, setScale] = useState(1)
+  const [rotation, setRotation] = useState(0)
+  const [position, setPosition] = useState<Point>({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const [showKeyboardHints, setShowKeyboardHints] = useState(false)
+  const dragStateRef = useRef<{ start: Point; startPosition: Point } | null>(null)
+  const pinchStateRef = useRef<{ initialDistance: number; initialScale: number } | null>(null)
+  const activeTransformRef = useRef<ActiveTransform>(null)
+  
+  // Undo/Redo history
+  interface TransformState {
+    scale: number
+    rotation: number
+    position: Point
+  }
+  const [history, setHistory] = useState<TransformState[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const isApplyingHistoryRef = useRef(false)
+
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const imageWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const imageMetaRef = useRef<ImageMeta | null>(null)
+  const baseScaleRef = useRef(1)
+  const previousImageDataRef = useRef<string | null>(null)
+
+  const {
+    uploadError,
+    uploadSuccess,
+    isUploading,
+    designState,
+    saveOriginalAsset,
+    saveEditedAsset,
+    clearError,
+  } = useImageUpload({
+    disabled,
+    onDesignStateChange: onDesignChange,
+  })
+  const hasHydratedFromDraft = useRef(false)
+  const [isTouchDevice, setIsTouchDevice] = useState(false)
+
+  useEffect(() => {
+    if (!designState) {
+      if (hasHydratedFromDraft.current) {
+        setImageData(null)
+        setPreviewKind(null)
+        setFileType(null)
+        setScale(1)
+        setRotation(0)
+        setPosition({ x: 0, y: 0 })
+      }
+      setIsImageSelected(false)
+      return
+    }
+
+    const nextImage =
+      designState.previewDataUrl ??
+      designState.edited?.dataUrl ??
+      designState.original?.dataUrl ??
+      null
+
+    if (nextImage) {
+      setImageData(nextImage)
+    }
+
+    setPreviewKind(designState.previewKind ?? null)
+    setFileType(designState.edited?.type ?? designState.original?.type ?? null)
+
+    if (designState.transformations) {
+      setScale(designState.transformations.scale)
+      setRotation(designState.transformations.rotation)
+      setPosition(designState.transformations.position)
+    }
+
+    setIsImageSelected(true)
+
+    hasHydratedFromDraft.current = true
+  }, [designState])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const touch =
+      "ontouchstart" in window ||
+      (navigator.maxTouchPoints ?? 0) > 0 ||
+      window.matchMedia("(pointer: coarse)").matches
+
+    setIsTouchDevice(touch)
+  }, [])
+
+  const { hasTransparency, checkTransparency } = useTransparencyCheck({
+    imageDataUrl: imageData,
     fileType: fileType || undefined,
     shape,
   })
 
-  // Auto-dismiss success modal after 3 seconds
+  const cornerHandles = useMemo(
+    () => [
+      { key: "top-left", style: { top: 0, left: 0 }, cursor: "nwse-resize" as const },
+      { key: "top-right", style: { top: 0, right: 0 }, cursor: "nesw-resize" as const },
+      { key: "bottom-left", style: { bottom: 0, left: 0 }, cursor: "nesw-resize" as const },
+      { key: "bottom-right", style: { bottom: 0, right: 0 }, cursor: "nwse-resize" as const },
+    ],
+    []
+  )
+
   useEffect(() => {
-    if (uploadSuccess) {
-      const timer = setTimeout(() => {
-        // Since we can't directly control uploadSuccess, we just let it naturally dismiss
-        // The hook should handle clearing the success state
-      }, 3000)
-      return () => clearTimeout(timer)
+    const element = containerRef.current
+    if (!element) return
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect()
+      setContainerSize({ width: rect.width, height: rect.height })
     }
-  }, [uploadSuccess])
 
-  // Analyze image colors to detect if it's predominantly dark
-  const analyzeImageColors = useCallback(async (imageDataUrl: string) => {
-    setIsAnalyzing(true)
-    try {
-      const img = new window.Image()
-      img.crossOrigin = 'anonymous'
-      
-      return new Promise<boolean>((resolve) => {
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            resolve(false)
-            return
-          }
+    updateSize()
+    const observer = new ResizeObserver(updateSize)
+    observer.observe(element)
 
-          canvas.width = img.width
-          canvas.height = img.height
-          ctx.drawImage(img, 0, 0)
+    return () => observer.disconnect()
+  }, [])
 
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-          const data = imageData.data
-
-          let totalBrightness = 0
-          let pixelCount = 0
-
-          // Sample every 10th pixel for performance
-          for (let i = 0; i < data.length; i += 40) {
-            const r = data[i]
-            const g = data[i + 1]
-            const b = data[i + 2]
-            const a = data[i + 3]
-
-            // Skip transparent pixels
-            if (a > 50) {
-              // Calculate perceived brightness using luminance formula
-              const brightness = (0.299 * r + 0.587 * g + 0.114 * b)
-              totalBrightness += brightness
-              pixelCount++
-            }
-          }
-
-          const averageBrightness = totalBrightness / pixelCount
-          const isDark = averageBrightness < 128 // Less than 50% brightness
-
-          setIsImageDark(isDark)
-          resolve(isDark)
-        }
-
-        img.onerror = () => {
-          setIsImageDark(false)
-          resolve(false)
-        }
-
-        img.src = imageDataUrl
-      })
-    } catch (error) {
-      console.error('Color analysis failed:', error)
+  useEffect(() => {
+    if (!imageData) {
+      imageMetaRef.current = null
+      setResolutionWarning(null)
       setIsImageDark(false)
-      return false
-    } finally {
-      setIsAnalyzing(false)
+      return
+    }
+
+    let cancelled = false
+
+    const analyze = async () => {
+      const meta = await analyzeImage(imageData, dimensions, shape, setResolutionWarning, setIsImageDark)
+      if (!cancelled) {
+        imageMetaRef.current = meta
+      }
+    }
+
+    analyze()
+
+    return () => {
+      cancelled = true
+    }
+  }, [imageData, dimensions, shape])
+
+  const renderSize = useMemo(() => {
+    if (!imageData || !imageMetaRef.current || !containerSize.width || !containerSize.height) {
+      return { width: 0, height: 0 }
+    }
+
+    const { width: naturalWidth, height: naturalHeight } = imageMetaRef.current
+    const scaleToFit = Math.min(containerSize.width / naturalWidth, containerSize.height / naturalHeight)
+    baseScaleRef.current = scaleToFit
+
+    return {
+      width: naturalWidth * scaleToFit,
+      height: naturalHeight * scaleToFit,
+    }
+  }, [imageData, containerSize.width, containerSize.height])
+
+  useEffect(() => {
+    // Only reset transformations when a completely new image is uploaded
+    // Don't reset when:
+    // 1. The design has been saved (designState?.edited exists)
+    // 2. We're hydrating from saved state (hasHydratedFromDraft.current is true)
+    const isNewImage = imageData && imageData !== previousImageDataRef.current
+    const hasSavedDesign = designState?.edited
+    const isHydrating = hasHydratedFromDraft.current
+    
+    if (isNewImage && !hasSavedDesign && !isHydrating) {
+      // Only reset for genuinely new uploads
+      setScale(1)
+      setRotation(0)
+      setPosition({ x: 0, y: 0 })
+      // Reset history for new image
+      setHistory([{ scale: 1, rotation: 0, position: { x: 0, y: 0 } }])
+      setHistoryIndex(0)
+    }
+    
+    previousImageDataRef.current = imageData
+  }, [imageData, renderSize.width, renderSize.height, designState?.edited])
+
+  // Record transform changes to history with debounce
+  useEffect(() => {
+    if (!imageData || isApplyingHistoryRef.current) return
+
+    const timer = setTimeout(() => {
+      setHistory(prevHistory => {
+        const currentIndex = historyIndex
+        const lastState = prevHistory[currentIndex]
+        
+        // Only add to history if there's an actual change
+        if (lastState && 
+            lastState.scale === scale && 
+            lastState.rotation === rotation && 
+            lastState.position.x === position.x && 
+            lastState.position.y === position.y) {
+          return prevHistory
+        }
+
+        const currentState: TransformState = { scale, rotation, position }
+        
+        // Remove any history after current index and add new state
+        const newHistory = prevHistory.slice(0, currentIndex + 1)
+        newHistory.push(currentState)
+        
+        // Limit history to 50 states
+        if (newHistory.length > 50) {
+          newHistory.shift()
+          // Index stays the same after shift
+          return newHistory
+        } else {
+          setHistoryIndex(newHistory.length - 1)
+          return newHistory
+        }
+      })
+    }, 300) // Debounce by 300ms to batch rapid changes
+
+    return () => clearTimeout(timer)
+  }, [scale, rotation, position, imageData, historyIndex])
+
+  // Undo function
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0 && history.length > 0) {
+      isApplyingHistoryRef.current = true
+      const previousState = history[historyIndex - 1]
+      if (previousState) {
+        setScale(previousState.scale)
+        setRotation(previousState.rotation)
+        setPosition(previousState.position)
+        setHistoryIndex(historyIndex - 1)
+      }
+      setTimeout(() => {
+        isApplyingHistoryRef.current = false
+      }, 0)
+    }
+  }, [history, historyIndex])
+
+  // Redo function
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      isApplyingHistoryRef.current = true
+      const nextState = history[historyIndex + 1]
+      if (nextState) {
+        setScale(nextState.scale)
+        setRotation(nextState.rotation)
+        setPosition(nextState.position)
+        setHistoryIndex(historyIndex + 1)
+      }
+      setTimeout(() => {
+        isApplyingHistoryRef.current = false
+      }, 0)
+    }
+  }, [history, historyIndex])
+
+  const shapeStyles = useMemo(
+    () => getContainerStyles(shape, dimensions, compact, !!imageData),
+    [shape, dimensions, compact, imageData]
+  )
+
+      const displaySize = useMemo(() => {
+    const baseWidth = shapeStyles.pixelWidth || containerSize.width || 1
+    const baseHeight = shapeStyles.pixelHeight || containerSize.height || 1
+    const aspectRatio = baseHeight / baseWidth
+
+    const availableWidth = containerSize.width || baseWidth
+    const targetWidth = Math.min(baseWidth, availableWidth)
+
+    return {
+      width: targetWidth,
+      height: targetWidth * aspectRatio,
+    }
+  }, [shapeStyles.pixelWidth, shapeStyles.pixelHeight, containerSize.width, containerSize.height])
+
+  const shouldShowCheckerboard = useMemo(
+    () => shape === "diecut" || hasTransparency,
+    [shape, hasTransparency]
+  )
+
+  const containerBackgroundStyle = useMemo(() => {
+    if (shouldShowCheckerboard) {
+      return {
+        backgroundColor: "#f4f4f5",
+        backgroundImage:
+          "linear-gradient(45deg, #e4e4e7 25%, transparent 25%)," +
+          "linear-gradient(-45deg, #e4e4e7 25%, transparent 25%)," +
+          "linear-gradient(45deg, transparent 75%, #e4e4e7 75%)," +
+          "linear-gradient(-45deg, transparent 75%, #e4e4e7 75%)",
+        backgroundSize: "16px 16px",
+        backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+      } as const
+    }
+
+    return {
+      backgroundColor: "#14161b",
+    } as const
+  }, [shouldShowCheckerboard])
+
+  const actualBackgroundClass = ""
+
+  const dropzoneStyle = useMemo<CSSProperties>(() => {
+    const {
+      width: _baseWidth,
+      height: baseHeight,
+      maxWidth: baseMaxWidth,
+      aspectRatio,
+      ...restContainerStyles
+    } = shapeStyles.containerStyles
+
+    return {
+      ...restContainerStyles,
+      ...(containerBackgroundStyle ?? {}),
+      width: "100%",
+      height: aspectRatio ? "auto" : baseHeight ?? "auto",
+      maxWidth: baseMaxWidth ?? "100%",
+      minHeight: compact ? 220 : 320,
+      aspectRatio: aspectRatio,
+      borderRadius: shapeStyles.borderRadius,
+      clipPath: shapeStyles.clipPath,
+      margin: "0 auto",
+    }
+  }, [shapeStyles.containerStyles, containerBackgroundStyle, shapeStyles.borderRadius, shapeStyles.clipPath, compact])
+
+  const boundaryOverlayStyle = useMemo<CSSProperties>(() => {
+    const insetValue = compact ? "10px" : "14px"
+    
+    const base: CSSProperties = {
+      position: "absolute",
+      inset: insetValue,
+      border: "2px dashed rgba(255,255,255,0.35)",
+      pointerEvents: "none",
+      zIndex: 1,
+    }
+
+    // Apply shape-specific border radius
+    if (shape === "circle") {
+      return {
+        ...base,
+        borderRadius: "50%",
+        inset: "12px", // Slightly tighter for circles
+      }
+    } else if (shape === "square") {
+      return {
+        ...base,
+        borderRadius: "8px",
+      }
+    } else if (shape === "diecut") {
+      return {
+        ...base,
+        border: "2px dashed rgba(255,255,255,0.45)",
+        borderRadius: "16px",
+      }
+    } else {
+      // Rectangle
+      return {
+        ...base,
+        borderRadius: "12px",
+      }
+    }
+  }, [shape, compact])
+
+  const getWrapperCenter = useCallback(() => {
+    const rect = imageWrapperRef.current?.getBoundingClientRect()
+    if (!rect) {
+      return null
+    }
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
     }
   }, [])
 
-  // Analyze colors when image changes
-  useEffect(() => {
-    if (image && backgroundMode === 'auto') {
-      analyzeImageColors(image)
-    }
-  }, [image, backgroundMode, analyzeImageColors])
+  const handleScaleChange = useCallback((delta: number) => {
+    setScale((prev) => clamp(prev + delta, 0.5, 3))
+  }, [])
 
-  // Determine actual background based on mode and analysis
-  const actualBackground = useMemo(() => {
-    if (backgroundMode === 'light') return 'light'
-    if (backgroundMode === 'dark') return 'dark'
-    // Auto mode: use light background for dark images, dark for light images
-    return isImageDark ? 'light' : 'dark'
-  }, [backgroundMode, isImageDark])
-
-  // Handle file processing for preview
-  const onDrop = useCallback(
-    async (acceptedFiles: File[]) => {
-      const file = acceptedFiles[0]
-      if (!file || disabled) return
-
-      // Set up preview immediately
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const result = e.target?.result
-        if (typeof result === 'string') {
-          setImage(result)
-          setFileType(file.type)
-          setScale(1)
-          setStickerZoom(1) // Reset both zoom levels
-        }
+  const handleRotationChange = useCallback((delta: number) => {
+    setRotation((prev) => {
+      let next = prev + delta
+      if (next > 180) {
+        next -= 360
+      } else if (next <= -180) {
+        next += 360
       }
-      reader.readAsDataURL(file)
+      return Math.max(-180, Math.min(180, next))
+    })
+  }, [])
 
-      // Also handle the upload to server
-      await handleDrop(acceptedFiles)
+  const startScaleHandleDrag = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!imageData) return
+      event.preventDefault()
+      event.stopPropagation()
+      const center = getWrapperCenter()
+      if (!center) {
+        return
+      }
+
+      const element = event.currentTarget
+      if (element.setPointerCapture) {
+        element.setPointerCapture(event.pointerId)
+      }
+
+      const initialDistance = Math.hypot(event.clientX - center.x, event.clientY - center.y) || 1
+
+      activeTransformRef.current = {
+        type: "scale",
+        initialScale: scale,
+        initialDistance,
+        pointerId: event.pointerId,
+        target: element,
+      }
+
+      setIsImageSelected(true)
     },
-    [handleDrop, disabled]
+    [getWrapperCenter, imageData, scale]
   )
 
-  // Setup dropzone
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: onDrop,
-    accept: {
-      "image/*": [".png", ".jpg", ".jpeg", ".gif"],
-    },
-    multiple: false,
-    disabled: disabled || isUploading,
-  })
+  const startRotateHandleDrag = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!imageData) return
+      event.preventDefault()
+      event.stopPropagation()
+      const center = getWrapperCenter()
+      if (!center) {
+        return
+      }
 
-  // Memoize shape styles for performance with sticker zoom
-  const shapeStyles = useMemo(() => {
-    const baseStyles = getContainerStyles(shape, dimensions, compact, !!image)
-    return {
-      ...baseStyles,
-      containerStyles: {
-        ...baseStyles.containerStyles,
-        transform: `scale(${stickerZoom})`,
-        transformOrigin: 'center',
+      const element = event.currentTarget
+      if (element.setPointerCapture) {
+        element.setPointerCapture(event.pointerId)
+      }
+
+      const initialAngle = Math.atan2(event.clientY - center.y, event.clientX - center.x)
+
+      activeTransformRef.current = {
+        type: "rotate",
+        initialRotation: rotation,
+        initialAngle,
+        pointerId: event.pointerId,
+        target: element,
+      }
+
+      setIsImageSelected(true)
+    },
+    [getWrapperCenter, imageData, rotation]
+  )
+
+  const startDrag = useCallback((point: Point) => {
+    if (!imageData) return
+    setIsDragging(true)
+    dragStateRef.current = {
+      start: point,
+      startPosition: position,
+    }
+  }, [imageData, position])
+
+  const updateDrag = useCallback((point: Point) => {
+    if (!imageData || !dragStateRef.current || !isDragging) return
+
+    const deltaX = point.x - dragStateRef.current.start.x
+    const deltaY = point.y - dragStateRef.current.start.y
+
+    setPosition({
+      x: dragStateRef.current.startPosition.x + deltaX,
+      y: dragStateRef.current.startPosition.y + deltaY,
+    })
+  }, [imageData, isDragging])
+
+  const endDrag = useCallback(() => {
+    dragStateRef.current = null
+    setIsDragging(false)
+  }, [])
+
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !imageData) return
+    event.preventDefault()
+    setIsImageSelected(true)
+    startDrag({ x: event.clientX, y: event.clientY })
+  }, [imageData, startDrag])
+
+  useEffect(() => {
+    const handleMove = (event: MouseEvent) => {
+      if (isDragging) {
+        updateDrag({ x: event.clientX, y: event.clientY })
       }
     }
-  }, [shape, dimensions, compact, image, stickerZoom])
+    const handleUp = () => {
+      endDrag()
+    }
 
-  const handleScaleChange = (delta: number) => {
-    setScale((prev) => Math.max(0.5, Math.min(3, prev + delta)))
-  }
+    document.addEventListener("mousemove", handleMove)
+    document.addEventListener("mouseup", handleUp)
+    return () => {
+      document.removeEventListener("mousemove", handleMove)
+      document.removeEventListener("mouseup", handleUp)
+    }
+  }, [isDragging, updateDrag, endDrag])
 
-  const handleStickerZoomChange = (delta: number) => {
-    setStickerZoom((prev) => Math.max(0.5, Math.min(2, prev + delta)))
-  }
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!imageData) return
+    setIsImageSelected(true)
+    if (event.touches.length === 1) {
+      const touch = event.touches[0]
+      startDrag({ x: touch.clientX, y: touch.clientY })
+    } else if (event.touches.length === 2) {
+      const [t1, t2] = Array.from(event.touches)
+      pinchStateRef.current = {
+        initialDistance: distanceBetweenTouches(t1, t2),
+        initialScale: scale,
+      }
+    }
+  }, [imageData, startDrag, scale])
 
-  // Generate cut lines and safety margins overlay based on shape
-  const CutLinesOverlay = () => {
-    if (!showCutlines) return null
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!imageData) return
 
-    // For die-cut shapes, don't show cut lines overlay since the outline handles the border
-    if (shape === "diecut") return null
+    if (event.touches.length === 1 && isDragging) {
+      const touch = event.touches[0]
+      updateDrag({ x: touch.clientX, y: touch.clientY })
+    } else if (event.touches.length === 2 && pinchStateRef.current) {
+      event.preventDefault()
+      const [t1, t2] = Array.from(event.touches)
+      const distance = distanceBetweenTouches(t1, t2)
+      const nextScale =
+        (pinchStateRef.current.initialScale * distance) /
+        (pinchStateRef.current.initialDistance || distance)
+      setScale(clamp(nextScale, 0.5, 3))
+    }
+  }, [imageData, isDragging, updateDrag])
 
-    const cutLineStyle = getCutLineStyles(shape)
-    const safetyStyle = getSafetyMarginStyles(shape)
+  const handleTouchEnd = useCallback(() => {
+    pinchStateRef.current = null
+    endDrag()
+  }, [endDrag])
 
-    return (
-      <>
-        {/* Cut lines */}
-        <div
-          className="absolute top-0 left-0 w-full h-full pointer-events-none z-10"
-          style={cutLineStyle}
-        />
-        {/* Safety margins */}
-        <div
-          className="absolute pointer-events-none z-20"
-          style={safetyStyle}
-        />
-      </>
-    )
-  }
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const active = activeTransformRef.current
+      if (!active || event.pointerId !== active.pointerId) {
+        return
+      }
+
+      const center = getWrapperCenter()
+      if (!center) {
+        return
+      }
+
+      event.preventDefault()
+
+      if (active.type === "scale") {
+        const distance = Math.hypot(event.clientX - center.x, event.clientY - center.y)
+        if (!distance || !active.initialDistance) {
+          return
+        }
+        const ratio = distance / active.initialDistance
+        const nextScale = clamp(active.initialScale * ratio, 0.5, 3)
+        setScale(nextScale)
+      } else if (active.type === "rotate") {
+        const currentAngle = Math.atan2(event.clientY - center.y, event.clientX - center.x)
+        const delta = currentAngle - active.initialAngle
+        let next = active.initialRotation + (delta * 180) / Math.PI
+        if (next > 180) {
+          next -= 360
+        } else if (next <= -180) {
+          next += 360
+        }
+        setRotation(Math.max(-180, Math.min(180, next)))
+      }
+    }
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const active = activeTransformRef.current
+      if (!active || event.pointerId !== active.pointerId) {
+        return
+      }
+
+      if (active.target?.releasePointerCapture) {
+        active.target.releasePointerCapture(active.pointerId)
+      }
+
+      activeTransformRef.current = null
+    }
+
+    document.addEventListener("pointermove", handlePointerMove, { passive: false })
+    document.addEventListener("pointerup", handlePointerUp)
+    document.addEventListener("pointercancel", handlePointerUp)
+
+    return () => {
+      document.removeEventListener("pointermove", handlePointerMove)
+      document.removeEventListener("pointerup", handlePointerUp)
+      document.removeEventListener("pointercancel", handlePointerUp)
+    }
+  }, [getWrapperCenter])
+
+  const onFileDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      const file = acceptedFiles[0]
+      if (!file || disabled) {
+        return
+      }
+
+      clearError()
+      setEditorError(null)
+      setIsProcessing(true)
+
+      let previewDataUrl: string | null = null
+      let nextPreviewKind: UploadPreviewKind = null
+
+      try {
+        const mimeType = (file.type || "").toLowerCase()
+        setFileType(file.type)
+
+        if (mimeType.startsWith("image/") || mimeType === "image/svg+xml") {
+          previewDataUrl = await fileToDataUrl(file)
+          nextPreviewKind = "bitmap"
+          setEditorError(null)
+        } else if (mimeType === "application/pdf") {
+          const previewImage = await convertPdfToImage(file)
+          if (previewImage) {
+            previewDataUrl = previewImage
+            nextPreviewKind = "pdf"
+            setEditorError(null)
+          } else {
+            nextPreviewKind = "unsupported"
+            setEditorError("Could not generate a preview for this PDF, but the file was stored.")
+          }
+        } else if (mimeType.includes("illustrator") || mimeType.includes("postscript")) {
+          const previewImage = await convertVectorToImage(file)
+          if (previewImage) {
+            previewDataUrl = previewImage
+            nextPreviewKind = "vector"
+            setEditorError(null)
+          } else {
+            nextPreviewKind = "unsupported"
+            setEditorError("Could not generate a preview for this file, but the original was stored.")
+          }
+        } else {
+          nextPreviewKind = "unsupported"
+          setEditorError("Unsupported file type. Please upload PNG, JPG, SVG, AI, or PDF.")
+        }
+
+        if (previewDataUrl) {
+          setImageData(previewDataUrl)
+          setPreviewKind(nextPreviewKind)
+        } else {
+          setImageData(null)
+          setPreviewKind("unsupported")
+        }
+
+        let autoSuggestion: AutoConfigureSuggestion | null = null
+        if (previewDataUrl) {
+          autoSuggestion = await deriveAutoConfigureSuggestion(
+            previewDataUrl,
+            file.type || "",
+            checkTransparency
+          )
+          if (autoSuggestion) {
+            onAutoConfigure?.(autoSuggestion)
+          }
+        }
+
+        const targetShape = autoSuggestion?.shape ?? shape
+        const targetDimensions = autoSuggestion?.dimensions ?? dimensions
+
+        await saveOriginalAsset({
+          file,
+          originalDataUrl:
+            (file.type || "").toLowerCase().startsWith("image/") || file.type === "image/svg+xml" ? previewDataUrl ?? undefined : undefined,
+          previewDataUrl: previewDataUrl ?? null,
+          previewKind: nextPreviewKind,
+          shape: targetShape,
+          dimensions: targetDimensions,
+        })
+        setIsImageSelected(true)
+      } catch (error) {
+        console.error("File drop failed:", error)
+        const message =
+          error instanceof Error ? error.message : "File processing failed. Please try again."
+        setEditorError(message)
+        if (!previewDataUrl) {
+          setImageData(null)
+          setPreviewKind("unsupported")
+        }
+      } finally {
+        setIsProcessing(false)
+      }
+    },
+    [disabled, clearError, saveOriginalAsset, shape, dimensions, onAutoConfigure, checkTransparency]
+  )
+
+  const handleReset = useCallback(() => {
+    if (!imageData) {
+      return
+    }
+    setScale(1)
+    setRotation(0)
+    setPosition({ x: 0, y: 0 })
+    setEditorError(null)
+  }, [imageData])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!imageData) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const modKey = isMac ? event.metaKey : event.ctrlKey
+
+      // Undo: Ctrl/Cmd + Z
+      if (modKey && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault()
+        handleUndo()
+      }
+      // Redo: Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y
+      else if ((modKey && event.shiftKey && event.key === 'z') || (modKey && event.key === 'y')) {
+        event.preventDefault()
+        handleRedo()
+      }
+      // Reset: R
+      else if (event.key === 'r' || event.key === 'R') {
+        event.preventDefault()
+        handleReset()
+      }
+      // Zoom in: + or =
+      else if (event.key === '+' || event.key === '=') {
+        event.preventDefault()
+        handleScaleChange(0.1)
+      }
+      // Zoom out: -
+      else if (event.key === '-') {
+        event.preventDefault()
+        handleScaleChange(-0.1)
+      }
+      // Rotate left: [
+      else if (event.key === '[') {
+        event.preventDefault()
+        handleRotationChange(-5)
+      }
+      // Rotate right: ]
+      else if (event.key === ']') {
+        event.preventDefault()
+        handleRotationChange(5)
+      }
+      // Arrow keys for fine positioning
+      else if (event.key.startsWith('Arrow')) {
+        event.preventDefault()
+        const step = event.shiftKey ? 10 : 1
+        switch (event.key) {
+          case 'ArrowUp':
+            setPosition(p => ({ ...p, y: p.y - step }))
+            break
+          case 'ArrowDown':
+            setPosition(p => ({ ...p, y: p.y + step }))
+            break
+          case 'ArrowLeft':
+            setPosition(p => ({ ...p, x: p.x - step }))
+            break
+          case 'ArrowRight':
+            setPosition(p => ({ ...p, x: p.x + step }))
+            break
+        }
+      }
+      // Show keyboard hints: ?
+      else if (event.key === '?' && event.shiftKey) {
+        event.preventDefault()
+        setShowKeyboardHints(prev => !prev)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [imageData, handleUndo, handleRedo, handleReset, handleScaleChange, handleRotationChange])
+
+  const handleSaveEditedDesign = useCallback(async () => {
+    if (!imageData || !imageMetaRef.current) {
+      setEditorError("Upload your artwork before saving the design.")
+      return
+    }
+
+    if (!containerSize.width || !containerSize.height || !renderSize.width || !renderSize.height) {
+      setEditorError("The preview area is not ready yet. Please try again in a moment.")
+      return
+    }
+
+    try {
+      setIsSavingDesign(true)
+
+      const img = await loadImage(imageData)
+      const { width: naturalWidth, height: naturalHeight } = imageMetaRef.current
+
+      const targetWidth = shapeStyles.pixelWidth || containerSize.width
+      const targetHeight = shapeStyles.pixelHeight || containerSize.height
+      const exportScale = 2
+      const canvasWidth = Math.max(1, Math.round(targetWidth * exportScale))
+      const canvasHeight = Math.max(1, Math.round(targetHeight * exportScale))
+      const offscreen = document.createElement("canvas")
+      offscreen.width = canvasWidth
+      offscreen.height = canvasHeight
+      const context = offscreen.getContext("2d")
+      if (!context) {
+        throw new Error("Unable to acquire canvas context")
+      }
+
+      context.scale(exportScale, exportScale)
+
+      const workingWidth = canvasWidth / exportScale
+      const workingHeight = canvasHeight / exportScale
+      context.clearRect(0, 0, workingWidth, workingHeight)
+
+      context.save()
+
+      if (shape === "circle") {
+        const radius = Math.min(workingWidth, workingHeight) / 2
+        context.beginPath()
+        context.arc(workingWidth / 2, workingHeight / 2, radius, 0, Math.PI * 2)
+        context.closePath()
+        context.clip()
+      } else if (shape === "square" || shape === "rectangle") {
+        const cornerRadius = shape === "rectangle" ? workingWidth * 0.035 : workingWidth * 0.01
+        createRoundedRectPath(context, 0, 0, workingWidth, workingHeight, cornerRadius)
+        context.clip()
+      }
+
+      context.fillStyle = isImageDark ? "#ffffff" : "#14161b"
+      context.fillRect(0, 0, workingWidth, workingHeight)
+
+      const baseScale = baseScaleRef.current || (renderSize.width && naturalWidth ? renderSize.width / naturalWidth : 1)
+      const finalScale = baseScale * scale
+      const destWidth = naturalWidth * finalScale
+      const destHeight = naturalHeight * finalScale
+
+      context.translate(workingWidth / 2 + position.x, workingHeight / 2 + position.y)
+      context.rotate((rotation * Math.PI) / 180)
+      context.drawImage(img, -destWidth / 2, -destHeight / 2, destWidth, destHeight)
+
+      context.restore()
+
+      const blob = await new Promise<Blob | null>((resolve) => offscreen.toBlob(resolve, "image/png"))
+      if (!blob) {
+        throw new Error("Failed to export edited design")
+      }
+
+      await saveEditedAsset({
+        blob,
+        fileName: "sticker-design.png",
+        mimeType: "image/png",
+        transformations: {
+          scale,
+          rotation,
+          position,
+        },
+      })
+    } catch (error) {
+      console.error("Failed to export edited design:", error)
+      setEditorError("We couldn't save the edited design. Please try again.")
+    } finally {
+      setIsSavingDesign(false)
+    }
+  }, [
+    imageData,
+    containerSize.width,
+    containerSize.height,
+    renderSize.width,
+    renderSize.height,
+    position,
+    rotation,
+    scale,
+    isImageDark,
+    shape,
+    shapeStyles.pixelWidth,
+    shapeStyles.pixelHeight,
+    saveEditedAsset,
+  ])
+
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop: onFileDrop,
+    accept: ACCEPTED_FILE_TYPES,
+    multiple: false,
+    disabled: disabled || isUploading,
+    noClick: isTouchDevice ? false : Boolean(imageData),
+    noKeyboard: isTouchDevice || Boolean(imageData),
+    noDrag: isTouchDevice,
+  })
+
+  const canBrowse = !(disabled || isUploading)
+
+  const canUndo = historyIndex > 0 && history.length > 1
+  const canRedo = historyIndex < history.length - 1
+
+  // Expose save function to parent via ref
+  useImperativeHandle(ref, () => ({
+    saveDesign: handleSaveEditedDesign,
+    isSavingDesign,
+  }), [handleSaveEditedDesign, isSavingDesign])
 
   return (
-    <div className="h-full flex">
-      {/* Photoshop-style Left Tool Panel */}
-      {image && (
-        <div className="flex-shrink-0 w-16 bg-neutral-800 border border-neutral-700 flex flex-col items-center py-4 gap-3 rounded-3xl mr-4">
-          {/* Design Zoom Controls (only for non-diecut) */}
-          {shape !== "diecut" && (
-            <DesignZoomTool
-              shape={shape}
-              scale={scale}
-              onScaleChange={handleScaleChange}
-            />
-          )}
-
-          {/* Divider */}
-          {shape !== "diecut" && <div className="w-8 h-px bg-neutral-600"></div>}
-
-          {/* Shape Selector Button */}
-          <ShapeSelectorTool
-            shape={shape}
-            onShapeChange={onShapeChange}
-          />
-
-          {/* Divider */}
-          <div className="w-8 h-px bg-neutral-600"></div>
-
-          {/* Background Mode Toggle */}
-          <BackgroundToggleTool
-            backgroundMode={backgroundMode}
-            onBackgroundModeChange={setBackgroundMode}
-            isImageDark={isImageDark}
-            isAnalyzing={isAnalyzing}
-          />
-
-          {/* Divider */}
-          <div className="w-8 h-px bg-neutral-600"></div>
-
-          {/* Cut Lines Toggle */}
-          <CutlinesToggleTool
-            showCutlines={showCutlines}
-            onToggleCutlines={() => setShowCutlines(!showCutlines)}
-          />
-
-
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col relative">
-        {/* Technical Dotted Background - Full Area */}
-        <div 
-          className="absolute inset-0 opacity-30 pointer-events-none"
-          style={{
-            backgroundImage: `radial-gradient(circle, #525252 1.5px, transparent 1.5px)`,
-            backgroundSize: '20px 20px',
-            backgroundPosition: '0 0, 10px 10px'
-          }}
-        />
-        
-        {/* Centered Header Section */}
-        <div className="flex-shrink-0 space-y-3 mb-4 text-center relative z-10">
-          <div className="text-sm text-neutral-400">
-            {shape === "circle"
-              ? `Size: ${dimensions.diameter}cm diameter`
-              : `Size: ${dimensions.width}cm × ${dimensions.height}cm`}
+    <div className="flex h-full flex-col">
+      {/* Top Bar - Fixed Info and Toolbar */}
+      <div className="relative z-10 space-y-3">
+        {/* Info Bar */}
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <div className="rounded-full bg-neutral-800/90 px-4 py-2 text-sm font-semibold text-neutral-200 shadow-lg backdrop-blur-sm">
+              {shape === "circle"
+                ? `⌀ ${dimensions.diameter}cm`
+                : `${dimensions.width}cm × ${dimensions.height}cm`}
+            </div>
+            {imageData && (
+              <button
+                onClick={() => setShowKeyboardHints(!showKeyboardHints)}
+                className="group flex items-center gap-1.5 rounded-full bg-indigo-900/40 px-3 py-2 text-xs font-medium text-indigo-300 shadow-md transition-all hover:bg-indigo-900/60"
+                title="Show keyboard shortcuts"
+              >
+                <MousePointerClick className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Shortcuts</span>
+                <span className="text-[10px] opacity-70">?</span>
+              </button>
+            )}
           </div>
-
-          {/* Status Indicators with Colored Dots */}
-          <div className="flex items-center justify-center gap-6 text-xs">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span className="text-red-400">Cut line</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-amber-400 rounded-full"></div>
-              <span className="text-amber-400">Safety margin</span>
-            </div>
-          </div>
-
-          <p className="text-xs text-neutral-500">
-            PNG, JPG, GIF formats. Auto-fits to your {shape} sticker.
-          </p>
-
-          {uploadError && (
-            <div className="p-3 bg-red-900/20 border border-red-500/50 rounded-md flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              <p className="text-sm text-red-400">{uploadError}</p>
-            </div>
-          )}
-
-        </div>
-
-        {/* Dynamic Drop Zone Area - Centered */}
-        <div className="flex-1 flex items-center justify-center relative z-10">
-          <div
-            {...getRootProps()}
-            style={shapeStyles.containerStyles}
-            className="relative cursor-pointer transition-all duration-300 ease-in-out"
-          >
-            {/* The container's border/clip settings change based on shape and transparency. */}
-            <div
-              className={clsx("transition-colors overflow-hidden w-full h-full", {
-                "border-2 border-dashed border-neutral-700 hover:border-neutral-500":
-                  !isDragActive && !disabled && !isUploading && !(shape === "diecut" && image),
-                "border-2 border-dashed border-white": isDragActive && !(shape === "diecut" && image),
-                "border-2 border-dashed border-blue-500 animate-pulse": isUploading,
-                "rounded-full": shapeStyles.borderRadius === "50%",
-                "rounded-xl": shapeStyles.borderRadius === "12px",
-                // For die-cut with image, canvas handles the border effect
-                "border-0": shape === "diecut" && image,
-                "opacity-50 cursor-not-allowed": disabled,
-                // Dynamic background based on image analysis
-                "bg-white": image && actualBackground === 'light',
-                "bg-neutral-900": image && actualBackground === 'dark',
-              })}
-              style={
-                shapeStyles.clipPath
-                  ? { clipPath: shapeStyles.clipPath }
-                  : undefined
-              }
-            >
-              <input {...getInputProps()} />
-
-              {/* Cut lines and safety margins overlay - always visible when toggled */}
-              <CutLinesOverlay />
-
-              {image ? (
-                <div className="relative w-full h-full overflow-hidden">
-                  {/*
-                      For die cut stickers, show image with smart background.
-                      For all other shapes we simply display the image.
-                    */}
-                  {shape === "diecut" ? (
-                    <div className="flex items-center justify-center w-full h-full">
-                       {isUploading && (
-                         <div className="relative w-full h-full">
-                           <Image
-                             src={image}
-                             alt="Preview"
-                             fill
-                             style={{
-                               objectFit: "contain",
-                               objectPosition: "50% 50%",
-                             }}
-                           />
-                           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                             <div className="flex flex-col items-center gap-2 text-white">
-                               <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full"></div>
-                               <span className="text-sm">Uploading...</span>
-                             </div>
-                           </div>
-                         </div>
-                       )}
-                       {isAnalyzing && (
-                         <div className="relative w-full h-full">
-                           <Image
-                             src={image}
-                             alt="Preview"
-                             fill
-                             style={{
-                               objectFit: "contain",
-                               objectPosition: "50% 50%",
-                             }}
-                           />
-                           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                             <div className="flex flex-col items-center gap-2 text-white">
-                               <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full"></div>
-                               <span className="text-sm">Analyzing image colors...</span>
-                             </div>
-                           </div>
-                         </div>
-                       )}
-                       {!isUploading && !isAnalyzing && (
-                         <div className="flex items-center justify-center w-full h-full">
-                           <Image
-                             src={image}
-                             alt="Preview"
-                             fill
-                             style={{
-                               objectFit: "contain",
-                               objectPosition: "50% 50%",
-                             }}
-                           />
-                         </div>
-                       )}
-                    </div>
-                  ) : (
-                    <Image
-                      src={image}
-                      alt="Preview"
-                      fill
-                      style={{
-                        objectFit: "contain",
-                        transform: `scale(${scale})`,
-                        objectPosition: "50% 50%",
-                        transition: "transform 0.2s ease-out",
-                      }}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                  <Upload className="w-12 h-12 text-neutral-500 mb-4" />
-                  <p className="text-lg font-medium text-neutral-300 mb-2">
-                    {isDragActive ? "Drop your image here" : "Upload your design"}
-                  </p>
-                  <p className="text-sm text-neutral-500">
-                    Drag and drop or click to browse
-                  </p>
-                </div>
+          
+          {/* Action Buttons - Top Right */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => open()}
+              disabled={disabled || isUploading}
+              className={clsx(
+                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                disabled || isUploading
+                  ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
+                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
               )}
-            </div>
+              title={imageData ? "Replace image" : "Upload image"}
+            >
+              <Upload className="h-4 w-4" />
+              <span className="hidden sm:inline">{imageData ? "Replace" : "Upload"}</span>
+            </button>
+            
+            {imageData && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Undo (Ctrl+Z)"
+                  className={clsx(
+                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                    !canUndo
+                      ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
+                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                  )}
+                >
+                  <Undo2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Undo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  title="Redo (Ctrl+Y)"
+                  className={clsx(
+                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                    !canRedo
+                      ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
+                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                  )}
+                >
+                  <Redo2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Redo</span>
+                </button>
+              </>
+            )}
+            
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={!imageData}
+              title="Reset (R)"
+              className={clsx(
+                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                !imageData
+                  ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
+                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+              )}
+            >
+              <RefreshCcw className="h-4 w-4" />
+              <span className="hidden sm:inline">Reset</span>
+            </button>
           </div>
         </div>
 
-        {/* Sticker Zoom Controls - Fixed to Bottom */}
-        {image && (
-          <div className="flex-shrink-0 flex justify-center pb-4 relative z-10">
-            <div className="flex items-center gap-4 p-3 bg-neutral-800 rounded-lg border border-neutral-700">
-              <span className="text-sm text-neutral-400 font-medium">Sticker Zoom:</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleStickerZoomChange(-0.1)}
-                  disabled={stickerZoom <= 0.5}
-                  className="w-8 h-8 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md flex items-center justify-center transition-colors"
-                  title="Zoom out sticker view"
-                >
-                  <Minus className="w-3 h-3" />
-                </button>
-                <div className="text-sm text-blue-300 font-mono min-w-[3rem] text-center">
-                  {Math.round(stickerZoom * 100)}%
-                </div>
-                <button
-                  onClick={() => handleStickerZoomChange(0.1)}
-                  disabled={stickerZoom >= 2}
-                  className="w-8 h-8 bg-blue-700 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md flex items-center justify-center transition-colors"
-                  title="Zoom in sticker view"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-              </div>
+        {/* Format Support Info */}
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-neutral-900/40 px-4 py-2 text-xs text-neutral-400">
+          <Info className="h-3.5 w-3.5 text-neutral-500" />
+          <span>PNG, JPG, SVG, AI, PDF (300 DPI+)</span>
+        </div>
+
+        {/* Error Messages - Top */}
+        {(uploadError || editorError) && (
+          <div className="animate-in fade-in slide-in-from-top-2 mx-auto max-w-2xl">
+            <div className="flex items-start gap-3 rounded-lg border border-red-500/50 bg-red-900/20 p-3 backdrop-blur-sm">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+              <p className="text-sm text-red-400">{uploadError ?? editorError}</p>
             </div>
           </div>
         )}
       </div>
 
-      {/* Upload Success Modal */}
-      {uploadSuccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-          <div className="bg-green-900/90 backdrop-blur-sm border border-green-500/50 rounded-lg p-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* Main Canvas Area - Flex Grow */}
+      <div className="relative flex flex-1 gap-3 pt-4 md:gap-4">
+        {/* Zoom/Rotation Controls - Left Side */}
+        {imageData && renderSize.width > 0 && renderSize.height > 0 && (
+          <div className="hidden w-20 flex-shrink-0 md:flex">
+            <div className="sticky top-4 h-fit w-full rounded-2xl border border-neutral-700 bg-neutral-800/80 p-3 shadow-xl backdrop-blur-sm">
+              <DesignZoomTool
+                scale={scale}
+                rotation={rotation}
+                onScaleChange={handleScaleChange}
+                onRotationChange={handleRotationChange}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Canvas Container */}
+        <div className="relative flex w-full flex-1 flex-col items-center justify-center p-4">
+          <div
+            {...getRootProps()}
+            ref={containerRef}
+            style={dropzoneStyle}
+            className={clsx(
+              "relative overflow-hidden rounded-2xl border-2 border-neutral-700 shadow-2xl transition-all duration-300 ease-in-out hover:border-neutral-600",
+              actualBackgroundClass,
+              {
+                "border-indigo-500/50 ring-4 ring-indigo-500/20": isDragActive,
+              }
+            )}
+            onWheel={(event) => {
+              if (!imageData || (!event.ctrlKey && !event.metaKey)) return
+              event.preventDefault()
+              const zoomFactor = 1 + -event.deltaY / 600
+              setScale((prev) => clamp(prev * zoomFactor, 0.5, 3))
+            }}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <input {...getInputProps()} />
+            <div className="pointer-events-none" style={boundaryOverlayStyle} />
+
+            {imageData && displaySize.width > 0 && displaySize.height > 0 ? (
+              <div
+                className="absolute left-1/2 top-1/2"
+                style={{
+                  width: displaySize.width,
+                  height: displaySize.height,
+                  transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`
+                }}
+              >
+                <div
+                  ref={imageWrapperRef}
+                  className="relative h-full w-full"
+                  style={{
+                    transform: `rotate(${rotation}deg) scale(${scale})`,
+                    transformOrigin: "center",
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imageData}
+                    alt="Artwork preview"
+                    draggable={false}
+                    className="h-full w-full select-none object-contain"
+                    style={{ userSelect: "none", pointerEvents: "none" }}
+                  />
+
+                  {isImageSelected && (
+                    <>
+                      <div
+                        className="pointer-events-none absolute inset-0 border-2 border-sky-400/80"
+                        style={{
+                          borderRadius: shapeStyles.borderRadius || (shape === "circle" ? "50%" : "12px"),
+                        }}
+                      />
+                      {cornerHandles.map(({ key, style, cursor }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-label="Resize design"
+                          className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-sky-400 shadow-sm"
+                          style={{ ...style, cursor }}
+                          onPointerDown={startScaleHandleDrag}
+                        />
+                      ))}
+                      <div className="pointer-events-none absolute left-1/2 top-0 flex -translate-x-1/2 -translate-y-full items-center justify-center">
+                        <span className="block h-6 w-px bg-sky-300/70" />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Rotate design"
+                        className="pointer-events-auto absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-[120%] rounded-full border border-white bg-sky-400 shadow"
+                        style={{ cursor: "grab" }}
+                        onPointerDown={startRotateHandleDrag}
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : previewKind === "unsupported" ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+                <div className="rounded-full bg-amber-900/30 p-4">
+                  <AlertCircle className="h-8 w-8 text-amber-400" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-semibold text-neutral-200">Preview unavailable</p>
+                  <p className="text-sm text-neutral-400">
+                    The original file has been uploaded, but we can&apos;t preview this format.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center"
+                role="button"
+                tabIndex={canBrowse ? 0 : -1}
+                onClick={() => {
+                  if (canBrowse) open()
+                }}
+                onKeyDown={(event) => {
+                  if (!canBrowse) return
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    open()
+                  }
+                }}
+              >
+                {isProcessing ? (
+                  <>
+                    <div className="relative">
+                      <div className="h-16 w-16 animate-spin rounded-full border-4 border-neutral-700 border-t-indigo-500"></div>
+                      <Upload className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 text-indigo-400" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-base font-semibold text-neutral-200">Preparing preview…</p>
+                      <p className="text-sm text-neutral-400">Converting your file for editing</p>
+                    </div>
+                  </>
+                ) : isDragActive ? (
+                  <>
+                    <div className="rounded-full bg-indigo-900/30 p-6">
+                      <Upload className="h-12 w-12 text-indigo-400" />
+                    </div>
+                    <p className="text-lg font-semibold text-indigo-200">Drop your file here</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-full bg-neutral-800/50 p-6">
+                      <Upload className="h-12 w-12 text-neutral-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-base font-semibold text-neutral-200">
+                        {isTouchDevice ? "Tap to upload your artwork" : "Drag & drop your artwork here"}
+                      </p>
+                      <p className="text-sm text-neutral-400">
+                        {isTouchDevice ? "Supported formats: PNG, JPG, SVG, AI, PDF" : "or click to browse files"}
+                      </p>
+                    </div>
+                    <div className="mt-2 rounded-lg border border-neutral-700 bg-neutral-800/50 px-4 py-2 text-xs text-neutral-400">
+                      {isTouchDevice
+                        ? "Use pinch and drag gestures to adjust your design after uploading"
+                        : "Adjust zoom, rotation, and position before saving"}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+        </div>
+
+        {supportsOrientation(shape, dimensions) && (
+          <div className="mt-4 flex items-center justify-center gap-3">
+            {(["portrait", "landscape"] as Orientation[]).map((option) => {
+              const isSelected = (orientation ?? deriveOrientation(shape, dimensions)) === option
+              const isPortrait = option === "portrait"
+
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => onOrientationChange?.(option)}
+                  disabled={!onOrientationChange}
+                  aria-label={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
+                  title={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
+                  className={clsx(
+                    "relative flex h-12 w-10 items-center justify-center rounded-lg border transition",
+                    isSelected
+                      ? "border-indigo-300 bg-indigo-800/50 text-indigo-100 shadow-md"
+                      : "border-neutral-600/80 bg-neutral-800/70 text-neutral-300/80 hover:border-neutral-500 hover:text-neutral-100",
+                    !onOrientationChange && "cursor-not-allowed opacity-60"
+                  )}
+                >
+                  <span
+                    className={clsx(
+                      "pointer-events-none block rounded-md border",
+                      isPortrait ? "h-7 w-4" : "h-4 w-7",
+                      isSelected ? "border-white/80 bg-white/10" : "border-neutral-200/60 bg-neutral-300/10"
+                    )}
+                  />
+                  {isSelected && (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <Check className="h-3.5 w-3.5 text-white" />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+
+      {/* Bottom Warnings - Outside canvas, visible above bottom bar */}
+      {resolutionWarning && imageData && (
+        <div className="mt-6 mb-2 animate-in fade-in slide-in-from-bottom-2">
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/50 bg-amber-900/90 p-4 shadow-2xl backdrop-blur-md">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-300" />
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-semibold text-amber-100">
+                Low resolution detected (~{Math.round(resolutionWarning.detectedPpi)} PPI)
+              </p>
+              <p className="text-xs text-amber-200">
+                For best print quality we recommend at least {resolutionWarning.recommended} PPI. Consider uploading a higher-resolution or vector file to avoid blurry results.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uploadSuccess && imageData && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-300">
+          <div className="rounded-xl border border-emerald-500/50 bg-emerald-900/95 p-5 shadow-2xl backdrop-blur-md">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                <Check className="w-5 h-5 text-white" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500 shadow-lg">
+                <Check className="h-6 w-6 text-white" />
               </div>
               <div>
-                <p className="text-green-100 font-medium">Upload Successful!</p>
-                <p className="text-green-200/80 text-sm">Your image has been uploaded and processed</p>
+                <p className="font-semibold text-emerald-50">Design saved!</p>
+                <p className="text-sm text-emerald-100/80">
+                  Your edited artwork is stored locally and will upload when you add it to the cart.
+                </p>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Keyboard Shortcuts Modal */}
+      {showKeyboardHints && imageData && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowKeyboardHints(false)}
+        >
+          <div 
+            className="w-full max-w-lg rounded-xl border border-neutral-700 bg-neutral-900 p-6 shadow-2xl animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-xl font-bold text-white">
+                <MousePointerClick className="h-5 w-5 text-indigo-400" />
+                Keyboard Shortcuts
+              </h3>
+              <button
+                onClick={() => setShowKeyboardHints(false)}
+                className="rounded-lg p-1.5 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-neutral-300">Transform</h4>
+                <div className="grid gap-2">
+                  <ShortcutItem keys={["Drag"]} description="Move artwork" />
+                  <ShortcutItem keys={["Ctrl", "Scroll"]} description="Zoom in/out" />
+                  <ShortcutItem keys={["+"]} description="Zoom in" />
+                  <ShortcutItem keys={["-"]} description="Zoom out" />
+                  <ShortcutItem keys={["["]} description="Rotate left" />
+                  <ShortcutItem keys={["]"]} description="Rotate right" />
+                </div>
+              </div>
 
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-neutral-300">Position</h4>
+                <div className="grid gap-2">
+                  <ShortcutItem keys={["↑", "↓", "←", "→"]} description="Move 1px" />
+                  <ShortcutItem keys={["Shift", "↑", "↓", "←", "→"]} description="Move 10px" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-neutral-300">History</h4>
+                <div className="grid gap-2">
+                  <ShortcutItem keys={["Ctrl", "Z"]} description="Undo" />
+                  <ShortcutItem keys={["Ctrl", "Shift", "Z"]} description="Redo" />
+                  <ShortcutItem keys={["Ctrl", "Y"]} description="Redo (alternative)" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-neutral-300">Other</h4>
+                <div className="grid gap-2">
+                  <ShortcutItem keys={["R"]} description="Reset layout" />
+                  <ShortcutItem keys={["?"]} description="Show this help" />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-lg bg-indigo-950/30 border border-indigo-800/30 p-3 text-xs text-indigo-200">
+              💡 Tip: Use keyboard shortcuts for faster and more precise editing!
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+})
+
+ImageDropZone.displayName = 'ImageDropZone'
+
+export default ImageDropZone
+
+// Helper component for keyboard shortcut display
+function ShortcutItem({ keys, description }: { keys: string[]; description: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-neutral-800/50 px-3 py-2">
+      <div className="flex items-center gap-1.5">
+        {keys.map((key, index) => (
+          <span key={index} className="flex items-center gap-1">
+            {index > 0 && <span className="text-neutral-600 text-xs">+</span>}
+            <kbd className="min-w-[28px] rounded bg-neutral-700 px-2 py-1 text-center text-xs font-semibold text-neutral-200 shadow-sm">
+              {key}
+            </kbd>
+          </span>
+        ))}
+      </div>
+      <span className="text-sm text-neutral-400">{description}</span>
+    </div>
+  )
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+function distanceBetweenTouches(t1: React.Touch, t2: React.Touch) {
+  const dx = t1.clientX - t2.clientX
+  const dy = t1.clientY - t2.clientY
+  return Math.hypot(dx, dy)
+}
+
+function createRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const r = Math.max(0, Math.min(radius, width / 2, height / 2))
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.lineTo(x + width - r, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r)
+  ctx.lineTo(x + width, y + height - r)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height)
+  ctx.lineTo(x + r, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r)
+  ctx.lineTo(x, y + r)
+  ctx.quadraticCurveTo(x, y, x + r, y)
+  ctx.closePath()
+}
+
+async function analyzeImage(
+  dataUrl: string,
+  dimensions: Dimensions,
+  shape: Shape,
+  setWarning: (value: { detectedPpi: number; recommended: number } | null) => void,
+  setDark: (value: boolean) => void
+): Promise<ImageMeta | null> {
+  try {
+    const img = await loadImage(dataUrl)
+    evaluateResolution(img, dimensions, shape, setWarning)
+    setDark(isPredominantlyDarkImage(img))
+    return { width: img.naturalWidth || img.width, height: img.naturalHeight || img.height }
+  } catch (error) {
+    console.error("Failed to analyze image", error)
+    setWarning(null)
+    setDark(false)
+    return null
+  }
+}
+
+function evaluateResolution(
+  img: HTMLImageElement,
+  dimensions: Dimensions,
+  shape: Shape,
+  setWarning: (value: { detectedPpi: number; recommended: number } | null) => void
+) {
+  let widthCm: number
+  let heightCm: number
+
+  if (shape === "circle" && dimensions.diameter) {
+    widthCm = dimensions.diameter
+    heightCm = dimensions.diameter
+  } else {
+    widthCm = dimensions.width || 0
+    heightCm = dimensions.height || 0
+  }
+
+  if (!widthCm || !heightCm) {
+    setWarning(null)
+    return
+  }
+
+  const widthInches = widthCm / 2.54
+  const heightInches = heightCm / 2.54
+  const widthPpi = img.naturalWidth / widthInches
+  const heightPpi = img.naturalHeight / heightInches
+  const detectedPpi = Math.min(widthPpi, heightPpi)
+
+  if (detectedPpi < MIN_PPI_WARNING) {
+    setWarning({ detectedPpi, recommended: PREFERRED_PPI })
+  } else {
+    setWarning(null)
+  }
+}
+
+async function loadImage(dataUrl: string): Promise<HTMLImageElement> {
+  return await new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = dataUrl
+  })
+}
+
+function isPredominantlyDarkImage(img: HTMLImageElement): boolean {
+  const canvas = document.createElement("canvas")
+  const context = canvas.getContext("2d")
+  if (!context) {
+    return false
+  }
+
+  canvas.width = img.naturalWidth || img.width
+  canvas.height = img.naturalHeight || img.height
+  if (!canvas.width || !canvas.height) {
+    return false
+  }
+
+  context.drawImage(img, 0, 0, canvas.width, canvas.height)
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height)
+
+  let totalBrightness = 0
+  let pixelCount = 0
+  for (let i = 0; i < data.length; i += 40) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const a = data[i + 3]
+    if (a > 50) {
+      const brightness = 0.299 * r + 0.587 * g + 0.114 * b
+      totalBrightness += brightness
+      pixelCount++
+    }
+  }
+
+  const averageBrightness = pixelCount > 0 ? totalBrightness / pixelCount : 255
+  return averageBrightness < 128
 }

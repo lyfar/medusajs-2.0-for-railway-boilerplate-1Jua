@@ -1,13 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { 
-  calculateStickerPricing, 
+import {
+  calculateStickerPricing,
   getStickerPricingTiers,
   StickerPricingResult,
   PricingTier,
 } from "@lib/data/stickers"
-import { isStickerVariant } from "@lib/util/sticker-utils"
 
 interface UseStickerPricingProps {
   variantId?: string
@@ -34,10 +33,8 @@ export const useStickerPricing = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isSticker = variantId ? isStickerVariant(variantId) : false
-
   const fetchPricing = useCallback(async () => {
-    if (!variantId || !enabled || !isSticker || quantity <= 0) {
+    if (!variantId || !enabled || quantity <= 0) {
       setPricing(null)
       return
     }
@@ -65,10 +62,10 @@ export const useStickerPricing = ({
     } finally {
       setLoading(false)
     }
-  }, [variantId, quantity, enabled, isSticker])
+  }, [variantId, quantity, enabled])
 
   const fetchTiers = useCallback(async () => {
-    if (!enabled || !isSticker) {
+    if (!enabled) {
       setTiers([])
       return
     }
@@ -79,7 +76,7 @@ export const useStickerPricing = ({
     } catch (err) {
       console.error("Failed to fetch pricing tiers:", err)
     }
-  }, [variantId, enabled, isSticker])
+  }, [variantId, enabled])
 
   useEffect(() => {
     fetchPricing()
@@ -94,7 +91,7 @@ export const useStickerPricing = ({
     tiers,
     loading,
     error,
-    isSticker,
+    isSticker: enabled && !!variantId,
     refetch: fetchPricing,
   }
 } 

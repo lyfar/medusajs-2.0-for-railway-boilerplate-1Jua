@@ -13,44 +13,33 @@ type ItemsTemplateProps = {
 const ItemsTemplate = ({ items, cart }: ItemsTemplateProps) => {
   const currencyCode = cart?.currency_code || "EUR"
   return (
-    <div className="bg-gray-800 dark:bg-black">
-      <div className="flex items-center mb-6 px-6">
-        <Heading className="text-xl-semi text-white">Cart</Heading>
+    <div className="bg-gray-800 dark:bg-black rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+        <Heading className="text-lg-semi text-white">Cart</Heading>
       </div>
       
       {/* Modern List Layout */}
-      <div className="flex flex-col">
-        {/* Top border */}
-        <div className="h-px bg-gray-600 dark:bg-gray-700 mb-0"></div>
-        
+      <div className="flex flex-col divide-y divide-gray-700">
         {items && cart
           ? items
               .sort((a, b) => {
                 return (a.created_at ?? 0) > (b.created_at ?? 0) ? -1 : 1
               })
               .map((item, index) => (
-                <div key={item.id}>
+                <div key={item.id} className={index === 0 ? "pt-2" : ""}>
                   <Item 
                     item={item} 
                     currencyCode={currencyCode} 
                     type="full" 
                     isLast={index === items.length - 1}
                   />
-                  {/* Separator after each item except the last */}
-                  {index < items.length - 1 && (
-                    <div className="h-px bg-gray-600 dark:bg-gray-700"></div>
-                  )}
                 </div>
               ))
           : Array.from(Array(3).keys()).map((i) => (
-              <div key={i}>
+              <div key={i} className={i === 0 ? "pt-2" : ""}>
                 <SkeletonLineItem />
-                {i < 2 && <div className="h-px bg-gray-600 dark:bg-gray-700"></div>}
               </div>
             ))}
-        
-        {/* Bottom border */}
-        <div className="h-px bg-gray-600 dark:bg-gray-700 mt-0"></div>
       </div>
     </div>
   )

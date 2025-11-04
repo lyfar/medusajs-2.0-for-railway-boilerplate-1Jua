@@ -18,13 +18,13 @@ const Register = ({ setCurrentView }: Props) => {
 
   return (
     <div
-      className="max-w-sm flex flex-col items-center"
+      className="max-w-sm w-full flex flex-col"
       data-testid="register-page"
     >
-      <h1 className="text-large-semi uppercase mb-6">
+      <h1 className="w-full text-left text-large-semi uppercase mb-6">
         Become a EggShell Member
       </h1>
-      <p className="text-center text-base-regular text-ui-fg-subtle mb-8">
+      <p className="w-full text-left text-base-regular text-ui-fg-subtle mb-8">
         Create your EggShell Member profile, and get access to an enhanced
         shopping experience.
       </p>
@@ -78,7 +78,7 @@ const Register = ({ setCurrentView }: Props) => {
             </div>
           </div>
         </div>
-        <span className="text-center text-ui-fg-subtle text-small-regular mt-6">
+        <span className="w-full text-left text-ui-fg-subtle text-small-regular mt-6">
           By creating an account, you agree to EggShell&apos;s{" "}
           <LocalizedClientLink
             href="/content/privacy-policy"
@@ -99,7 +99,7 @@ const Register = ({ setCurrentView }: Props) => {
           Join
         </SubmitButton>
       </form>
-      <span className="text-center text-ui-fg-base text-small-regular mt-6">
+      <span className="w-full text-left text-ui-fg-base text-small-regular mt-6">
         Already a member?{" "}
         <button
           onClick={() => setCurrentView(LOGIN_VIEW.SIGN_IN)}

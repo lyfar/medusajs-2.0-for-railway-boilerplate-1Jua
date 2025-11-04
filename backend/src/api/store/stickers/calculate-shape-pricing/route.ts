@@ -33,8 +33,7 @@ export async function POST(
       STICKER_PRICING_MODULE
     )
 
-    // Use the calculator's shape pricing method
-    const result = stickerPricingService['calculator'].calculateShapePricing(
+    const result = await stickerPricingService.calculateShapePricing(
       quantity,
       shape,
       dimensions,

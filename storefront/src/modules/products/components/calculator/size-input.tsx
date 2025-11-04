@@ -1,8 +1,9 @@
 'use client';
 
 import clsx from 'clsx';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Shape } from './shape-selector';
+import { SIZE_PRESETS, SizePresetKey, SizeDimensions } from './size-presets';
 
 interface SizeInputProps {
   shape: Shape;
@@ -10,44 +11,16 @@ interface SizeInputProps {
   onSizeChange: (dimensions: { width?: number; height?: number; diameter?: number }) => void;
 }
 
-type SizeOption = 'S' | 'M' | 'L' | 'XL' | 'Custom';
+type SizeOption = SizePresetKey | 'Custom';
 
-interface Dimensions {
-  width?: number;
-  height?: number;
-  diameter?: number;
-}
+type Dimensions = SizeDimensions;
 
 // Predefined sizes for each shape and size option
 const sizeMappings: Record<Shape, Record<SizeOption, Dimensions>> = {
-  rectangle: {
-    S: { width: 4, height: 7 },
-    M: { width: 6, height: 8 },
-    L: { width: 10, height: 6 },
-    XL: { width: 15, height: 5 },
-    Custom: {}
-  },
-  square: {
-    S: { width: 4, height: 4 },
-    M: { width: 8, height: 8 },
-    L: { width: 10, height: 10 },
-    XL: { width: 12, height: 12 },
-    Custom: {}
-  },
-  circle: {
-    S: { diameter: 2.5 },
-    M: { diameter: 5 },
-    L: { diameter: 7.5 },
-    XL: { diameter: 10 },
-    Custom: {}
-  },
-  diecut: {
-    S: { width: 7, height: 4 },
-    M: { width: 8, height: 6 },
-    L: { width: 10, height: 6 },
-    XL: { width: 15, height: 5 },
-    Custom: {}
-  }
+  rectangle: { ...SIZE_PRESETS.rectangle, Custom: {} },
+  square: { ...SIZE_PRESETS.square, Custom: {} },
+  circle: { ...SIZE_PRESETS.circle, Custom: {} },
+  diecut: { ...SIZE_PRESETS.diecut, Custom: {} }
 };
 
 export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInputProps) {
@@ -57,6 +30,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
     height: 0,
     diameter: 0
   });
+  const [dimensionErrors, setDimensionErrors] = useState<{ width?: string; height?: string; diameter?: string }>({})
 
   // Helper function to check if current dimensions match a predefined size
   const findMatchingSize = (dims: Dimensions): SizeOption | null => {
@@ -70,7 +44,10 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
           return size as SizeOption;
         }
       } else {
-        if (sizeDims.width === dims.width && sizeDims.height === dims.height) {
+        const matchesDirect = sizeDims.width === dims.width && sizeDims.height === dims.height;
+        const matchesSwapped = sizeDims.width === dims.height && sizeDims.height === dims.width;
+
+        if (matchesDirect || matchesSwapped) {
           return size as SizeOption;
         }
       }
@@ -85,6 +62,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
     
     if (matchingSize) {
       setSelectedSize(matchingSize);
+      setDimensionErrors({})
     } else if (dimensions.width || dimensions.height || dimensions.diameter) {
       setSelectedSize('Custom');
       setCustomDimensions({
@@ -107,21 +85,63 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
     onSizeChange(newDimensions);
   };
 
-  const handleCustomDimensionChange = (dimension: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
-    const newCustomDimensions = { ...customDimensions, [dimension]: numValue };
-    setCustomDimensions(newCustomDimensions);
-    
-    // Only update if we have valid dimensions
-    if (shape === 'circle' && numValue > 0) {
-      onSizeChange({ diameter: numValue });
-    } else if (shape !== 'circle' && newCustomDimensions.width && newCustomDimensions.height && newCustomDimensions.width > 0 && newCustomDimensions.height > 0) {
-      onSizeChange({ 
-        width: newCustomDimensions.width, 
-        height: newCustomDimensions.height 
-      });
+  const validateDimension = (dimension: keyof Dimensions, rawValue: number) => {
+    let message = ''
+    let value = rawValue
+
+    if (rawValue > 50) {
+      message = 'Maximum size is 50 cm per dimension'
+      value = 50
+    } else if (rawValue > 0 && rawValue < 1) {
+      message = 'Minimum size is 1 cm'
+      value = 1
+    } else if (rawValue === 0) {
+      message = 'Enter a value between 1 and 50 cm'
     }
-  };
+
+    setDimensionErrors((prev) => ({ ...prev, [dimension]: message }))
+    return value
+  }
+
+  const handleCustomDimensionChange = (dimension: keyof Dimensions, value: string) => {
+    if (!value) {
+      setCustomDimensions((prev) => ({ ...prev, [dimension]: 0 }))
+      setDimensionErrors((prev) => ({ ...prev, [dimension]: 'Enter a value between 1 and 50 cm' }))
+      return
+    }
+
+    const parsedValue = Number(value)
+    if (Number.isNaN(parsedValue)) {
+      return
+    }
+
+    const clampedValue = validateDimension(dimension, parsedValue)
+    const nextDimensions = { ...customDimensions, [dimension]: clampedValue }
+    setCustomDimensions(nextDimensions)
+
+    if (shape === 'circle') {
+      if (clampedValue >= 1) {
+        onSizeChange({ diameter: clampedValue })
+      }
+    } else {
+      if (nextDimensions.width && nextDimensions.height && nextDimensions.width >= 1 && nextDimensions.height >= 1) {
+        onSizeChange({ width: nextDimensions.width, height: nextDimensions.height })
+      }
+    }
+  }
+
+  const atMaximumSize = useMemo(() => {
+    if (shape === 'circle') {
+      return (customDimensions.diameter || 0) >= 50
+    }
+    return (customDimensions.width || 0) >= 50 || (customDimensions.height || 0) >= 50
+  }, [shape, customDimensions])
+
+  const sizeGuidanceText = useMemo(() => (
+    atMaximumSize
+      ? 'For sizes above 50 cm, please contact us for a custom quote.'
+      : 'Set each dimension between 1 cm and 50 cm. Need something larger? Reach out to us.'
+  ), [atMaximumSize])
 
   const getDimensionDisplay = (size: SizeOption): string => {
     if (size === 'Custom') return 'Custom';
@@ -136,95 +156,109 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
 
   return (
     <div className="space-y-4">
-      {/* Size Selection Buttons */}
-      <div className="flex gap-2">
-        {(['S', 'M', 'L', 'XL', 'Custom'] as SizeOption[]).map((size) => (
-          <button
-            key={size}
-            onClick={() => handleSizeSelect(size)}
-            className={clsx(
-              'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
-              {
-                'bg-neutral-800 text-white border border-neutral-700 shadow-lg': 
-                  selectedSize === size,
-                'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:bg-neutral-800 hover:border-neutral-700': 
-                  selectedSize !== size
-              }
-            )}
-          >
-            <div className="font-bold">{size}</div>
-            <div className="text-xs opacity-70 mt-0.5">
-              {getDimensionDisplay(size)}
-            </div>
-          </button>
-        ))}
+      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {(['S', 'M', 'L', 'XL', 'Custom'] as SizeOption[]).map((size) => {
+          const isSelected = selectedSize === size
+
+          return (
+            <button
+              key={size}
+              onClick={() => handleSizeSelect(size)}
+              className={clsx(
+                'h-full w-full rounded-rounded border px-4 py-3 text-left text-sm font-medium transition-colors',
+                isSelected
+                  ? 'border-ui-border-strong bg-ui-bg-field text-ui-fg-base shadow-elevation-card-hover'
+                  : 'border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-base hover:text-ui-fg-base'
+              )}
+            >
+              <div className="text-xs uppercase tracking-wide text-ui-fg-muted">{size}</div>
+              <div className={clsx('text-sm font-semibold', isSelected ? 'text-ui-fg-base' : 'text-ui-fg-subtle')}>
+                {getDimensionDisplay(size)}
+              </div>
+            </button>
+          )
+        })}
       </div>
 
-      {/* Custom Dimension Inputs */}
       {selectedSize === 'Custom' && (
-        <div className="overflow-hidden">
-          <div className="animate-in slide-in-from-top-2 duration-300">
-            <div className="space-y-3">
-              {shape === 'circle' ? (
-                <div>
-                  <label className="block text-sm font-medium text-neutral-300 mb-2">
-                    Diameter (cm)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    step="0.1"
-                    placeholder="Enter diameter"
-                    className="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-4 py-2 text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-colors"
-                    value={customDimensions.diameter || ''}
-                    onChange={(e) => handleCustomDimensionChange('diameter', e.target.value)}
-                  />
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-300 mb-2">
-                      Width (cm)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      step="0.1"
-                      placeholder="Width"
-                      className="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-4 py-2 text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-colors"
-                      value={customDimensions.width || ''}
-                      onChange={(e) => handleCustomDimensionChange('width', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-300 mb-2">
-                      Height (cm)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      step="0.1"
-                      placeholder="Height"
-                      className="w-full rounded-lg bg-neutral-800 border border-neutral-700 px-4 py-2 text-white placeholder-neutral-500 focus:border-blue-500 focus:outline-none transition-colors"
-                      value={customDimensions.height || ''}
-                      onChange={(e) => handleCustomDimensionChange('height', e.target.value)}
-                    />
-                  </div>
-                </div>
+        <div className="space-y-4 rounded-rounded border border-ui-border-base bg-ui-bg-subtle p-4">
+          {shape === 'circle' ? (
+            <div className="space-y-1.5">
+              <label className={clsx('text-xs font-medium uppercase tracking-wide', dimensionErrors.diameter ? 'text-ui-fg-error' : 'text-ui-fg-muted')}>
+                Diameter (cm)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                step="0.1"
+                value={customDimensions.diameter || ''}
+                onChange={(event) => handleCustomDimensionChange('diameter', event.target.value)}
+                className={clsx(
+                  'w-full rounded-rounded border px-3 py-2 text-sm transition-colors focus:outline-none',
+                  dimensionErrors.diameter
+                    ? 'border-ui-border-error bg-ui-bg-field text-ui-fg-error focus:border-ui-border-error'
+                    : 'border-ui-border-base bg-ui-bg-base text-ui-fg-base focus:border-ui-border-strong'
+                )}
+              />
+              {dimensionErrors.diameter && (
+                <p className="text-xs text-ui-fg-error">{dimensionErrors.diameter}</p>
               )}
-              <p className="text-xs text-neutral-500">
-                {shape === 'circle' 
-                  ? 'Minimum: 1cm • Maximum: 50cm diameter'
-                  : 'Minimum: 1cm • Maximum: 50cm per dimension'
-                }
-              </p>
             </div>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className={clsx('text-xs font-medium uppercase tracking-wide', dimensionErrors.width ? 'text-ui-fg-error' : 'text-ui-fg-muted')}>
+                  Width (cm)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="0.1"
+                  value={customDimensions.width || ''}
+                  onChange={(event) => handleCustomDimensionChange('width', event.target.value)}
+                  className={clsx(
+                    'w-full rounded-rounded border px-3 py-2 text-sm transition-colors focus:outline-none',
+                    dimensionErrors.width
+                      ? 'border-ui-border-error bg-ui-bg-field text-ui-fg-error focus:border-ui-border-error'
+                      : 'border-ui-border-base bg-ui-bg-base text-ui-fg-base focus:border-ui-border-strong'
+                  )}
+                />
+                {dimensionErrors.width && (
+                  <p className="text-xs text-ui-fg-error">{dimensionErrors.width}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <label className={clsx('text-xs font-medium uppercase tracking-wide', dimensionErrors.height ? 'text-ui-fg-error' : 'text-ui-fg-muted')}>
+                  Height (cm)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="0.1"
+                  value={customDimensions.height || ''}
+                  onChange={(event) => handleCustomDimensionChange('height', event.target.value)}
+                  className={clsx(
+                    'w-full rounded-rounded border px-3 py-2 text-sm transition-colors focus:outline-none',
+                    dimensionErrors.height
+                      ? 'border-ui-border-error bg-ui-bg-field text-ui-fg-error focus:border-ui-border-error'
+                      : 'border-ui-border-base bg-ui-bg-base text-ui-fg-base focus:border-ui-border-strong'
+                  )}
+                />
+                {dimensionErrors.height && (
+                  <p className="text-xs text-ui-fg-error">{dimensionErrors.height}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <p className={clsx('text-xs', atMaximumSize ? 'text-ui-fg-error' : 'text-ui-fg-muted')}>
+            {sizeGuidanceText}
+          </p>
         </div>
       )}
     </div>
-  );
+  )
 } 

@@ -1,15 +1,45 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from "react"
 
-export type UploadState = 'idle' | 'uploading' | 'success' | 'error'
+import {
+  blobToDataUrl,
+  clearDesignState,
+  DesignDraftState,
+  estimateDataUrlSize,
+  fileToDataUrl,
+  generateDesignId,
+  readDesignState,
+  StoredDimensions,
+  StoredUploadPreviewKind,
+  updateDesignState,
+} from "../utils/design-storage"
+import { Shape } from "../shape-selector"
+import { Dimensions } from "../types"
 
-interface UploadResult {
-  fileKey: string
-  publicUrl: string
+export type UploadState = "idle" | "uploading" | "success" | "error"
+
+interface SaveOriginalPayload {
+  file: File
+  originalDataUrl?: string
+  previewDataUrl: string | null
+  previewKind: StoredUploadPreviewKind
+  shape: Shape
+  dimensions: Dimensions
+}
+
+interface SaveEditedPayload {
+  blob: Blob
+  fileName: string
+  mimeType: string
+  transformations: {
+    scale: number
+    rotation: number
+    position: { x: number; y: number }
+  }
 }
 
 interface UseImageUploadProps {
-  onFileUpload?: (fileKey: string, publicUrl: string) => void
   disabled?: boolean
+  onDesignStateChange?: (state: DesignDraftState | null) => void
 }
 
 interface UseImageUploadReturn {
@@ -17,153 +47,204 @@ interface UseImageUploadReturn {
   uploadError: string | null
   uploadSuccess: boolean
   isUploading: boolean
-  handleDrop: (acceptedFiles: File[]) => Promise<void>
-  uploadFile: (file: File) => Promise<UploadResult | null>
+  designState: DesignDraftState | null
+  saveOriginalAsset: (payload: SaveOriginalPayload) => Promise<void>
+  saveEditedAsset: (payload: SaveEditedPayload) => Promise<void>
   clearError: () => void
   clearSuccess: () => void
+  clearDesign: () => void
 }
 
-export function useImageUpload({ 
-  onFileUpload, 
-  disabled 
+const SUCCESS_RESET_DELAY = 2500
+
+export function useImageUpload({
+  disabled,
+  onDesignStateChange,
 }: UseImageUploadProps): UseImageUploadReturn {
-  const [uploadState, setUploadState] = useState<UploadState>('idle')
+  const [uploadState, setUploadState] = useState<UploadState>("idle")
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [designState, setDesignState] = useState<DesignDraftState | null>(() => readDesignState())
 
-  const isUploading = uploadState === 'uploading'
+  const successTimeoutRef = useRef<number | null>(null)
+
+  const isUploading = uploadState === "uploading"
+
+  useEffect(() => {
+    onDesignStateChange?.(designState ?? null)
+  }, [designState, onDesignStateChange])
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        window.clearTimeout(successTimeoutRef.current)
+        successTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  const scheduleSuccessReset = useCallback(() => {
+    if (successTimeoutRef.current) {
+      window.clearTimeout(successTimeoutRef.current)
+    }
+
+    successTimeoutRef.current = window.setTimeout(() => {
+      setUploadSuccess(false)
+      setUploadState("idle")
+      successTimeoutRef.current = null
+    }, SUCCESS_RESET_DELAY)
+  }, [])
 
   const clearError = useCallback(() => {
     setUploadError(null)
-    setUploadState('idle')
-  }, [])
-
-  const clearSuccess = useCallback(() => {
-    setUploadSuccess(false)
-    if (uploadState === 'success') {
-      setUploadState('idle')
+    if (uploadState === "error") {
+      setUploadState("idle")
     }
   }, [uploadState])
 
-  /**
-   * Uploads file to backend and gets the file key and public URL
-   */
-  const uploadFile = useCallback(async (file: File): Promise<UploadResult | null> => {
-    try {
-      setUploadState('uploading')
-      setUploadError(null)
-
-      const publishableKey = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
-      const backendUrl = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL || "http://localhost:9000"
-
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      }
-
-      if (publishableKey) {
-        headers["x-publishable-api-key"] = publishableKey
-      } else {
-        console.warn("No publishable API key found. Upload may fail.")
-      }
-
-      // First, get the upload URL from the backend
-      const uploadUrlResponse = await fetch(
-        `${backendUrl}/store/stickers/upload-url`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            filename: file.name,
-            mimeType: file.type,
-          }),
-        }
-      )
-
-      if (!uploadUrlResponse.ok) {
-        const errorText = await uploadUrlResponse.text()
-        try {
-          const errorData = JSON.parse(errorText)
-          throw new Error(
-            errorData.message || errorData.error || "Failed to get upload URL"
-          )
-        } catch (e) {
-          throw new Error(
-            "Failed to get upload URL. The server returned a non-JSON response."
-          )
-        }
-      }
-
-      const { upload_url, file_key } = await uploadUrlResponse.json()
-
-      // Upload the file to the presigned URL
-      const uploadResponse = await fetch(upload_url, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      })
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload file to storage")
-      }
-
-      // Construct the public URL
-      const publicUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL
-        ? `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${file_key}`
-        : upload_url.split("?")[0] // Remove query params
-
-      const result = { fileKey: file_key, publicUrl }
-      
-      setUploadState('success')
-      setUploadSuccess(true)
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setUploadSuccess(false)
-        setUploadState('idle')
-      }, 3000)
-
-      return result
-    } catch (error) {
-      console.error("Upload error:", error)
-      const errorMessage = error instanceof Error ? error.message : "Upload failed"
-      setUploadError(errorMessage)
-      setUploadState('error')
-      return null
+  const clearSuccess = useCallback(() => {
+    if (successTimeoutRef.current) {
+      window.clearTimeout(successTimeoutRef.current)
+      successTimeoutRef.current = null
     }
+    setUploadSuccess(false)
+    if (uploadState === "success") {
+      setUploadState("idle")
+    }
+  }, [uploadState])
+
+  const handleDesignUpdate = useCallback((updater: (prev: DesignDraftState | null) => DesignDraftState | null) => {
+    const next = updateDesignState(updater)
+    setDesignState(next ?? null)
+    return next
   }, [])
 
-  /**
-   * Handle file drop from react-dropzone
-   */
-  const handleDrop = useCallback(async (acceptedFiles: File[]) => {
-    const file = acceptedFiles[0]
-    if (!file || disabled) {
-      return
-    }
-
-    try {
-      const uploadResult = await uploadFile(file)
-      if (uploadResult && onFileUpload) {
-        onFileUpload(uploadResult.fileKey, uploadResult.publicUrl)
+  const saveOriginalAsset = useCallback(
+    async ({
+      file,
+      originalDataUrl,
+      previewDataUrl,
+      previewKind,
+      shape,
+      dimensions,
+    }: SaveOriginalPayload) => {
+      if (disabled) {
+        return
       }
-    } catch (error) {
-      console.error("File drop failed:", error)
-      const errorMessage = error instanceof Error ? error.message : "File processing failed"
-      setUploadError(errorMessage)
-      setUploadState('error')
-    }
-  }, [uploadFile, onFileUpload, disabled])
+
+      setUploadError(null)
+      setUploadState("uploading")
+
+      try {
+        const baseOriginalDataUrl =
+          typeof originalDataUrl === "string" ? originalDataUrl : await fileToDataUrl(file)
+        const nextState = handleDesignUpdate((prev) => {
+          const id = prev?.id ?? generateDesignId()
+          return {
+            id,
+            original: {
+              name: file.name,
+              type: file.type,
+              dataUrl: baseOriginalDataUrl,
+              lastModified: file.lastModified,
+              size: file.size,
+            },
+            // Reset edited design because original artwork changed
+            edited: undefined,
+            previewKind,
+            previewDataUrl: previewDataUrl ?? undefined,
+            transformations: {
+              scale: 1,
+              rotation: 0,
+              position: { x: 0, y: 0 },
+            },
+            lastTransformations: undefined,
+            shape,
+            dimensions: { ...dimensions } as StoredDimensions,
+            updatedAt: Date.now(),
+          }
+        })
+
+        setDesignState(nextState ?? null)
+        setUploadState("idle")
+      } catch (error) {
+        console.error("Failed to store original sticker design", error)
+        const message =
+          error instanceof Error ? error.message : "Unable to store original file locally"
+        setUploadError(message)
+        setUploadState("error")
+        throw error
+      }
+    },
+    [disabled, handleDesignUpdate]
+  )
+
+  const saveEditedAsset = useCallback(
+    async ({ blob, fileName, mimeType, transformations }: SaveEditedPayload) => {
+      if (disabled) {
+        return
+      }
+
+      setUploadError(null)
+      setUploadState("uploading")
+
+      try {
+        const dataUrl = await blobToDataUrl(blob)
+        const nextState = handleDesignUpdate((prev) => {
+          if (!prev?.original) {
+            throw new Error("Upload artwork before saving your edited design.")
+          }
+
+          return {
+            ...prev,
+            id: prev.id ?? generateDesignId(),
+            edited: {
+              name: fileName,
+              type: mimeType,
+              dataUrl,
+              lastModified: Date.now(),
+              size: blob.size || estimateDataUrlSize(dataUrl),
+            },
+            // Keep the original image as preview and maintain transformations
+            // The edited (rendered) image is stored for cart upload only
+            previewDataUrl: prev.previewDataUrl,
+            transformations: transformations,
+            lastTransformations: transformations,
+            updatedAt: Date.now(),
+          }
+        })
+
+        setDesignState(nextState ?? null)
+        setUploadState("success")
+        setUploadSuccess(true)
+        scheduleSuccessReset()
+      } catch (error) {
+        console.error("Failed to store edited design", error)
+        const message =
+          error instanceof Error ? error.message : "Unable to store edited design locally"
+        setUploadError(message)
+        setUploadState("error")
+        throw error
+      }
+    },
+    [disabled, handleDesignUpdate, scheduleSuccessReset]
+  )
+
+  const clearDesign = useCallback(() => {
+    clearDesignState()
+    setDesignState(null)
+  }, [])
 
   return {
     uploadState,
     uploadError,
     uploadSuccess,
     isUploading,
-    handleDrop,
-    uploadFile,
+    designState,
+    saveOriginalAsset,
+    saveEditedAsset,
     clearError,
     clearSuccess,
+    clearDesign,
   }
-} 
+}

@@ -1,14 +1,63 @@
-// Your sticker variant ID
-const STICKER_VARIANT_ID = "variant_01K03CSEQN3W8F1CRXJFW7AZWV"
-
 // Minimum Order Quantity for stickers
 export const STICKER_MOQ = 500
 
+const STICKER_PRODUCT_TYPE_VALUE = "sticker"
+
 /**
- * Check if a variant ID is a sticker variant
+ * Determine if a product should be treated as a sticker product.
+ * Accepts any object with an optional `type.value` string or `metadata.is_sticker` flag.
  */
-export function isStickerVariant(variantId: string): boolean {
-  return variantId === STICKER_VARIANT_ID
+export function isStickerProduct(
+  product:
+    | { type?: { value?: string | null } | string | null; metadata?: Record<string, unknown> | null }
+    | null
+    | undefined
+): boolean {
+  if (!product) {
+    return false
+  }
+
+  const metadata = product.metadata as Record<string, unknown> | null | undefined
+  if (metadata && typeof metadata.is_sticker === "boolean") {
+    return metadata.is_sticker
+  }
+
+  const typeValue =
+    typeof product.type === "string"
+      ? product.type
+      : product.type?.value
+
+  return typeof typeValue === "string" && typeValue.toLowerCase() === STICKER_PRODUCT_TYPE_VALUE
+}
+
+/**
+ * Determine if a cart or order line item represents a sticker.
+ * Falls back to product type when the metadata flag is missing.
+ */
+export function isStickerLineItem(
+  item:
+    | {
+        metadata?: Record<string, unknown> | null
+        variant?: { product?: { type?: { value?: string | null } | string | null; metadata?: Record<string, unknown> | null } | null }
+      }
+    | null
+    | undefined
+): boolean {
+  if (!item) {
+    return false
+  }
+
+  const metadata = item.metadata as Record<string, unknown> | null | undefined
+  if (metadata && typeof metadata.is_sticker === "boolean") {
+    return metadata.is_sticker
+  }
+
+  const variantProduct = item.variant?.product
+  if (variantProduct) {
+    return isStickerProduct(variantProduct)
+  }
+
+  return false
 }
 
 /**
