@@ -94,6 +94,15 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
     setDimensions((prev) => applyOrientationToDimensions(prev, nextOrientation));
   }, [shape, dimensions]);
 
+  const handleOrientationToggle = useCallback(() => {
+    if (!supportsOrientation(shape, dimensions)) {
+      return;
+    }
+    const nextOrientation: Orientation = orientation === 'portrait' ? 'landscape' : 'portrait';
+    handleOrientationChange(nextOrientation);
+  }, [shape, dimensions, orientation, handleOrientationChange]);
+
+  const orientationEnabled = supportsOrientation(shape, dimensions);
 
   return (
     <div className="space-y-6">
@@ -103,13 +112,21 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
         onDesignChange={handleDesignChange}
         onAutoConfigure={handleAutoConfigure}
         orientation={orientation}
-        onOrientationChange={supportsOrientation(shape, dimensions) ? handleOrientationChange : undefined}
+        onOrientationChange={orientationEnabled ? handleOrientationChange : undefined}
         disabled={disabled}
+        quantity={quantity}
+        onShapeChange={handleShapeChange}
+        onSizeChange={handleSizeChange}
+        onQuantityChange={handleQuantityChange}
+        onOrientationToggle={orientationEnabled ? handleOrientationToggle : undefined}
+        canAdjustOrientation={orientationEnabled}
       />
 
-      <ShapeSection shape={shape} onShapeChange={handleShapeChange} />
-      <SizeSection shape={shape} dimensions={dimensions} onSizeChange={handleSizeChange} />
-      <QuantitySection onQuantityChange={handleQuantityChange} />
+      <div className="hidden flex-col space-y-6 md:flex">
+        <ShapeSection shape={shape} onShapeChange={handleShapeChange} />
+        <SizeSection shape={shape} dimensions={dimensions} onSizeChange={handleSizeChange} />
+        <QuantitySection quantity={quantity} onQuantityChange={handleQuantityChange} />
+      </div>
     </div>
   );
 }

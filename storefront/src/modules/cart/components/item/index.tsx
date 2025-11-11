@@ -12,7 +12,7 @@ import LineItemUnitPrice from "@modules/common/components/line-item-unit-price"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import Spinner from "@modules/common/icons/spinner"
 import Thumbnail from "@modules/products/components/thumbnail"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { isStickerLineItem } from "@lib/util/sticker-utils"
 import Lightbox from "@modules/common/components/lightbox"
 
@@ -63,10 +63,12 @@ const Item = ({ item, type = "full", currencyCode, isLast = false }: ItemProps) 
   }
   
   const designUrl = rawDesignUrl ? normalizeCloudflareUrl(rawDesignUrl) : null
+  const stickerDimensions = item.metadata?.dimensions as { width?: number; height?: number; diameter?: number } | undefined
+  const stickerShape = typeof item.metadata?.shape === "string" ? (item.metadata.shape as string) : null
   
   // Format size display from dimensions
   const formatSizeDisplay = () => {
-    const dimensions = item.metadata?.dimensions as { width?: number; height?: number; diameter?: number } | undefined
+    const dimensions = stickerDimensions
     if (!dimensions) return null
     
     if (dimensions.diameter) {
@@ -95,18 +97,78 @@ const Item = ({ item, type = "full", currencyCode, isLast = false }: ItemProps) 
     )
   }
 
+  const stickerAspectRatio = useMemo(() => {
+    if (!stickerDimensions) return 1
+    if (stickerDimensions.diameter) return 1
+    const { width, height } = stickerDimensions
+    if (!width || !height) return 1
+    const ratio = width / height
+    if (!Number.isFinite(ratio) || ratio <= 0) {
+      return 1
+    }
+    return Math.min(Math.max(ratio, 0.35), 3.5)
+  }, [
+    stickerDimensions?.width,
+    stickerDimensions?.height,
+    stickerDimensions?.diameter,
+  ])
+
+  const stickerPreviewRadius = useMemo(() => {
+    if (!stickerShape) return "0.75rem"
+    const normalized = stickerShape.toLowerCase()
+    if (normalized === "circle") return "999px"
+    if (normalized === "diecut") return "1rem"
+    if (normalized === "square") return "0.65rem"
+    return "0.75rem"
+  }, [stickerShape])
+
+  const renderDesignThumbnail = (variant: "preview" | "desktop" | "mobile") => {
+    const baseWidth =
+      variant === "preview" ? 64 : variant === "mobile" ? 80 : 88
+
+    if (designUrl && isSticker) {
+      return (
+        <button
+          type="button"
+          onClick={() => setIsLightboxOpen(true)}
+          className="relative block flex-shrink-0 overflow-hidden border border-ui-border-subtle bg-ui-bg-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-ui-ring"
+          style={{
+            width: baseWidth,
+            aspectRatio: stickerAspectRatio,
+            borderRadius: stickerPreviewRadius,
+          }}
+        >
+          <img
+            src={designUrl}
+            alt="Custom sticker design"
+            className="absolute inset-0 h-full w-full bg-neutral-950 object-contain"
+          />
+          <span className="sr-only">Preview full sticker design</span>
+        </button>
+      )
+    }
+
+    return (
+      <LocalizedClientLink href={`/products/${item.product_handle}`}>
+        <div
+          className="relative flex-shrink-0 overflow-hidden rounded-md border border-ui-border-subtle bg-ui-bg-subtle"
+          style={{ width: baseWidth, height: baseWidth }}
+        >
+          <Thumbnail
+            thumbnail={item.thumbnail}
+            images={item.variant?.product?.images}
+            size="square"
+            className="rounded-none"
+          />
+        </div>
+      </LocalizedClientLink>
+    )
+  }
+
   if (type === "preview") {
     return (
       <div className="flex items-center gap-x-4 py-3">
-        <div className="w-16 h-16 flex-shrink-0">
-          <LocalizedClientLink href={`/products/${item.product_handle}`}>
-            <Thumbnail
-              thumbnail={item.thumbnail}
-              images={item.variant?.product?.images}
-              size="square"
-            />
-          </LocalizedClientLink>
-        </div>
+        <div className="flex-shrink-0">{renderDesignThumbnail("preview")}</div>
         <div className="flex-1 min-w-0">
           <Text className="text-ui-fg-base font-medium truncate">
             {item.product_title}
@@ -129,31 +191,7 @@ const Item = ({ item, type = "full", currencyCode, isLast = false }: ItemProps) 
       <div className="hidden small:grid small:grid-cols-[minmax(0,1.6fr)_auto_auto_auto_auto] small:items-center small:gap-6 small:py-2">
         {/* Product Image and Details */}
         <div className="flex items-center gap-4 min-w-0">
-          <div className="w-20 h-20 flex-shrink-0 rounded-md overflow-hidden border border-ui-border-subtle bg-ui-bg-subtle">
-            {designUrl ? (
-              <button
-                type="button"
-                onClick={() => setIsLightboxOpen(true)}
-                className="relative block w-full h-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-ui-ring"
-              >
-                <img
-                  src={designUrl}
-                  alt="Custom sticker design"
-                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                />
-                <span className="sr-only">Preview full sticker design</span>
-              </button>
-            ) : (
-              <LocalizedClientLink href={`/products/${item.product_handle}`}>
-                <Thumbnail
-                  thumbnail={item.thumbnail}
-                  images={item.variant?.product?.images}
-                  size="square"
-                  className="rounded-md"
-                />
-              </LocalizedClientLink>
-            )}
-          </div>
+          {renderDesignThumbnail("desktop")}
           <div className="flex flex-col gap-2 min-w-0">
             <Text className="text-ui-fg-base dark:text-white font-semibold text-base">
               {item.product_title}
@@ -244,31 +282,7 @@ const Item = ({ item, type = "full", currencyCode, isLast = false }: ItemProps) 
       <div className="small:hidden space-y-4">
         {/* Product Info */}
         <div className="flex gap-4">
-          <div className="w-20 h-20 flex-shrink-0 rounded-md overflow-hidden border border-ui-border-subtle bg-ui-bg-subtle">
-            {designUrl ? (
-              <button
-                type="button"
-                onClick={() => setIsLightboxOpen(true)}
-                className="relative block w-full h-full group focus:outline-none focus-visible:ring-2 focus-visible:ring-ui-ring"
-              >
-                <img
-                  src={designUrl}
-                  alt="Custom sticker design"
-                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                />
-                <span className="sr-only">Preview full sticker design</span>
-              </button>
-            ) : (
-              <LocalizedClientLink href={`/products/${item.product_handle}`}>
-                <Thumbnail
-                  thumbnail={item.thumbnail}
-                  images={item.variant?.product?.images}
-                  size="square"
-                  className="rounded-md"
-                />
-              </LocalizedClientLink>
-            )}
-          </div>
+          {renderDesignThumbnail("mobile")}
           <div className="flex-1 min-w-0">
             <Text className="text-ui-fg-base dark:text-white font-semibold text-base">
               {item.product_title}

@@ -49,6 +49,9 @@ interface ImageDropZoneProps {
 export interface ImageDropZoneHandle {
   saveDesign: () => Promise<void>
   isSavingDesign: boolean
+  handleScaleChange: (delta: number) => void
+  handleRotationChange: (delta: number) => void
+  handleReset: () => void
 }
 
 export type AutoConfigureSuggestion = {
@@ -116,6 +119,9 @@ const shapePriorityTransparent: Record<Shape, number> = {
   square: 2,
   rectangle: 3,
 }
+
+const SIZE_TRANSITION =
+  "width 240ms ease, height 240ms ease, border-radius 240ms ease, left 240ms ease, top 240ms ease"
 
 const getNormalizedRatio = (width: number, height: number) => {
   const larger = Math.max(width, height)
@@ -543,11 +549,12 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     setIsTouchDevice(touch)
   }, [])
 
-  const { hasTransparency, checkTransparency } = useTransparencyCheck({
+  const { checkTransparency } = useTransparencyCheck({
     imageDataUrl: imageData,
     fileType: fileType || undefined,
     shape,
   })
+
 
   const cornerHandles = useMemo(
     () => [
@@ -599,20 +606,130 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     }
   }, [imageData, dimensions, shape])
 
+  const shapeStyles = useMemo(
+    () => getContainerStyles(shape, dimensions, compact, !!imageData),
+    [shape, dimensions, compact, imageData]
+  )
+
+  // Calculate sticker area size (needed for renderSize calculation)
+  const stickerAreaSize = useMemo(() => {
+    const containerW = containerSize.width || 0
+    const containerH = containerSize.height || 0
+    if (!containerW || !containerH) return { width: 0, height: 0 }
+
+    const pxW = shapeStyles.pixelWidth || containerW
+    const pxH = shapeStyles.pixelHeight || containerH
+    const ratio = pxH / pxW || 1
+
+    let w = Math.min(pxW, containerW)
+    let h = w * ratio
+    if (h > containerH) {
+      h = Math.min(pxH, containerH)
+      w = h / ratio
+    }
+    return { width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)) }
+  }, [shapeStyles.pixelWidth, shapeStyles.pixelHeight, containerSize.width, containerSize.height])
+
+  const stickerBorderRadius = useMemo(() => {
+    switch (shape) {
+      case "circle":
+        return "9999px"
+      case "square":
+      case "rectangle":
+        return "12px"
+      default:
+        return "16px"
+    }
+  }, [shape])
+  const derivedOrientation = useMemo(() => deriveOrientation(shape, dimensions), [shape, dimensions])
+  const orientationSupported = supportsOrientation(shape, dimensions)
+  const canAdjustOrientation = orientationSupported && typeof onOrientationChange === "function"
+  const activeOrientation = orientation ?? derivedOrientation
+  const hasZoomControls = Boolean(imageData && stickerAreaSize.width > 0 && stickerAreaSize.height > 0)
+  const shouldShowControlPanel = hasZoomControls || canAdjustOrientation
+
   const renderSize = useMemo(() => {
-    if (!imageData || !imageMetaRef.current || !containerSize.width || !containerSize.height) {
+    if (!imageData || !imageMetaRef.current || !stickerAreaSize.width || !stickerAreaSize.height) {
       return { width: 0, height: 0 }
     }
 
     const { width: naturalWidth, height: naturalHeight } = imageMetaRef.current
-    const scaleToFit = Math.min(containerSize.width / naturalWidth, containerSize.height / naturalHeight)
+    // Fit image within sticker area while maintaining aspect ratio
+    const scaleToFit = Math.min(stickerAreaSize.width / naturalWidth, stickerAreaSize.height / naturalHeight)
     baseScaleRef.current = scaleToFit
 
     return {
       width: naturalWidth * scaleToFit,
       height: naturalHeight * scaleToFit,
     }
-  }, [imageData, containerSize.width, containerSize.height])
+  }, [imageData, stickerAreaSize.width, stickerAreaSize.height])
+
+  const isImageOverflowing = useMemo(() => {
+    if (!stickerAreaSize.width || !stickerAreaSize.height || !renderSize.width || !renderSize.height) {
+      return false
+    }
+
+    const stickerHalfWidth = stickerAreaSize.width / 2
+    const stickerHalfHeight = stickerAreaSize.height / 2
+    const scaledWidth = renderSize.width * scale
+    const scaledHeight = renderSize.height * scale
+
+    const rad = (rotation * Math.PI) / 180
+    const cos = Math.cos(rad)
+    const sin = Math.sin(rad)
+
+    const rotatedHalfWidth = Math.abs(scaledWidth * cos) / 2 + Math.abs(scaledHeight * sin) / 2
+    const rotatedHalfHeight = Math.abs(scaledWidth * sin) / 2 + Math.abs(scaledHeight * cos) / 2
+
+    return (
+      Math.abs(position.x) + rotatedHalfWidth > stickerHalfWidth ||
+      Math.abs(position.y) + rotatedHalfHeight > stickerHalfHeight
+    )
+  }, [
+    renderSize.width,
+    renderSize.height,
+    position.x,
+    position.y,
+    scale,
+    rotation,
+    stickerAreaSize.width,
+    stickerAreaSize.height,
+  ])
+
+  const controlScaleCompensation = 1 / Math.max(scale, 0.001)
+  const selectionBorderClass = useMemo(
+    () =>
+      clsx(
+        "pointer-events-none absolute inset-0 border transition-all duration-200",
+        isImageOverflowing
+          ? "border-amber-400/90 shadow-[0_0_22px_rgba(251,191,36,0.35)]"
+          : "border-sky-400/80"
+      ),
+    [isImageOverflowing]
+  )
+
+  const handleAccentClass = useMemo(
+    () =>
+      clsx(
+        "pointer-events-auto absolute h-3 w-3 rounded-full border transition-colors duration-150",
+        isImageOverflowing
+          ? "border-white/80 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
+          : "border-white bg-sky-400 shadow-sm"
+      ),
+    [isImageOverflowing]
+  )
+
+  const rotationHandleClass = useMemo(
+    () =>
+      clsx(
+        "pointer-events-auto absolute h-4 w-4 rounded-full border shadow transition-colors duration-150",
+        isImageOverflowing
+          ? "border-white/80 bg-amber-400"
+          : "border-white bg-sky-400"
+      ),
+    [isImageOverflowing]
+  )
+
 
   useEffect(() => {
     // Only reset transformations when a completely new image is uploaded
@@ -709,111 +826,87 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     }
   }, [history, historyIndex])
 
-  const shapeStyles = useMemo(
-    () => getContainerStyles(shape, dimensions, compact, !!imageData),
-    [shape, dimensions, compact, imageData]
-  )
-
-      const displaySize = useMemo(() => {
-    const baseWidth = shapeStyles.pixelWidth || containerSize.width || 1
-    const baseHeight = shapeStyles.pixelHeight || containerSize.height || 1
-    const aspectRatio = baseHeight / baseWidth
-
-    const availableWidth = containerSize.width || baseWidth
-    const targetWidth = Math.min(baseWidth, availableWidth)
-
-    return {
-      width: targetWidth,
-      height: targetWidth * aspectRatio,
-    }
-  }, [shapeStyles.pixelWidth, shapeStyles.pixelHeight, containerSize.width, containerSize.height])
-
-  const shouldShowCheckerboard = useMemo(
-    () => shape === "diecut" || hasTransparency,
-    [shape, hasTransparency]
-  )
-
-  const containerBackgroundStyle = useMemo(() => {
-    if (shouldShowCheckerboard) {
-      return {
-        backgroundColor: "#f4f4f5",
-        backgroundImage:
-          "linear-gradient(45deg, #e4e4e7 25%, transparent 25%)," +
-          "linear-gradient(-45deg, #e4e4e7 25%, transparent 25%)," +
-          "linear-gradient(45deg, transparent 75%, #e4e4e7 75%)," +
-          "linear-gradient(-45deg, transparent 75%, #e4e4e7 75%)",
-        backgroundSize: "16px 16px",
-        backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-      } as const
-    }
-
-    return {
-      backgroundColor: "#14161b",
-    } as const
-  }, [shouldShowCheckerboard])
-
-  const actualBackgroundClass = ""
-
   const dropzoneStyle = useMemo<CSSProperties>(() => {
-    const {
-      width: _baseWidth,
-      height: baseHeight,
-      maxWidth: baseMaxWidth,
-      aspectRatio,
-      ...restContainerStyles
-    } = shapeStyles.containerStyles
-
     return {
-      ...restContainerStyles,
-      ...(containerBackgroundStyle ?? {}),
       width: "100%",
-      height: aspectRatio ? "auto" : baseHeight ?? "auto",
-      maxWidth: baseMaxWidth ?? "100%",
+      height: "100%",
       minHeight: compact ? 220 : 320,
-      aspectRatio: aspectRatio,
-      borderRadius: shapeStyles.borderRadius,
-      clipPath: shapeStyles.clipPath,
       margin: "0 auto",
+      position: "relative",
+      overflow: "hidden",
+      touchAction: isTouchDevice ? "none" : "auto",
     }
-  }, [shapeStyles.containerStyles, containerBackgroundStyle, shapeStyles.borderRadius, shapeStyles.clipPath, compact])
+  }, [compact, isTouchDevice])
 
-  const boundaryOverlayStyle = useMemo<CSSProperties>(() => {
-    const insetValue = compact ? "10px" : "14px"
-    
+  const stickerBoundaryInnerStyle = useMemo<CSSProperties>(() => {
+    // The dashed outline that represents the sticker area; drawn inside the sticker area box.
     const base: CSSProperties = {
       position: "absolute",
-      inset: insetValue,
+      inset: compact ? "10px" : "14px",
       border: "2px dashed rgba(255,255,255,0.35)",
       pointerEvents: "none",
-      zIndex: 1,
+      borderRadius: stickerBorderRadius,
+      transition: SIZE_TRANSITION,
     }
-
-    // Apply shape-specific border radius
-    if (shape === "circle") {
-      return {
-        ...base,
-        borderRadius: "50%",
-        inset: "12px", // Slightly tighter for circles
-      }
-    } else if (shape === "square") {
-      return {
-        ...base,
-        borderRadius: "8px",
-      }
-    } else if (shape === "diecut") {
+    if (shape === "diecut") {
       return {
         ...base,
         border: "2px dashed rgba(255,255,255,0.45)",
-        borderRadius: "16px",
-      }
-    } else {
-      // Rectangle
-      return {
-        ...base,
-        borderRadius: "12px",
       }
     }
-  }, [shape, compact])
+    return base
+  }, [shape, compact, stickerBorderRadius])
+
+  // Bleed/safe zone visualization inside the sticker area
+  const BLEED_CM = 0.3 // 3mm bleed recommended
+  const bleedStyles = useMemo(() => {
+    if (!stickerAreaSize.width || !stickerAreaSize.height) return null
+
+    // Determine selected cm dimensions by shape
+    let widthCm = 0
+    let heightCm = 0
+    if (shape === "circle") {
+      const d = dimensions.diameter || 0
+      widthCm = d
+      heightCm = d
+    } else if (shape === "square") {
+      const w = dimensions.width || 0
+      widthCm = w
+      heightCm = w
+    } else {
+      widthCm = dimensions.width || 0
+      heightCm = dimensions.height || 0
+    }
+
+    // px per cm for current overlay
+    const pxPerCmX = widthCm ? stickerAreaSize.width / widthCm : 0
+    const pxPerCmY = heightCm ? stickerAreaSize.height / heightCm : 0
+    const insetX = Math.max(0, Math.min(stickerAreaSize.width / 3, BLEED_CM * pxPerCmX))
+    const insetY = Math.max(0, Math.min(stickerAreaSize.height / 3, BLEED_CM * pxPerCmY))
+
+    const inner: CSSProperties = {
+      position: "absolute",
+      left: insetX,
+      right: insetX,
+      top: insetY,
+      bottom: insetY,
+      border: "2px dashed rgba(251, 191, 36, 0.85)", // amber-400
+      pointerEvents: "none",
+      borderRadius: stickerBorderRadius,
+      transition: SIZE_TRANSITION,
+    }
+
+    const outer: CSSProperties = {
+      position: "absolute",
+      inset: 0,
+      border: "2px solid rgba(255,255,255,0.5)",
+      pointerEvents: "none",
+      borderRadius: stickerBorderRadius,
+      transition: SIZE_TRANSITION,
+    }
+
+    return { inner, outer }
+  }, [shape, dimensions, stickerAreaSize.width, stickerAreaSize.height, stickerBorderRadius])
 
   const getWrapperCenter = useCallback(() => {
     const rect = imageWrapperRef.current?.getBoundingClientRect()
@@ -1239,7 +1332,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       return
     }
 
-    if (!containerSize.width || !containerSize.height || !renderSize.width || !renderSize.height) {
+    if (!containerSize.width || !containerSize.height || !stickerAreaSize.width || !stickerAreaSize.height) {
       setEditorError("The preview area is not ready yet. Please try again in a moment.")
       return
     }
@@ -1291,7 +1384,13 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       const destWidth = naturalWidth * finalScale
       const destHeight = naturalHeight * finalScale
 
-      context.translate(workingWidth / 2 + position.x, workingHeight / 2 + position.y)
+      // Scale position from sticker area pixels to export dimensions
+      const positionScaleX = stickerAreaSize.width > 0 ? targetWidth / stickerAreaSize.width : 1
+      const positionScaleY = stickerAreaSize.height > 0 ? targetHeight / stickerAreaSize.height : 1
+      const scaledPositionX = position.x * positionScaleX
+      const scaledPositionY = position.y * positionScaleY
+
+      context.translate(workingWidth / 2 + scaledPositionX, workingHeight / 2 + scaledPositionY)
       context.rotate((rotation * Math.PI) / 180)
       context.drawImage(img, -destWidth / 2, -destHeight / 2, destWidth, destHeight)
 
@@ -1322,8 +1421,9 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     imageData,
     containerSize.width,
     containerSize.height,
+    stickerAreaSize.width,
+    stickerAreaSize.height,
     renderSize.width,
-    renderSize.height,
     position,
     rotation,
     scale,
@@ -1349,11 +1449,14 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
   const canUndo = historyIndex > 0 && history.length > 1
   const canRedo = historyIndex < history.length - 1
 
-  // Expose save function to parent via ref
+  // Expose functions to parent via ref
   useImperativeHandle(ref, () => ({
     saveDesign: handleSaveEditedDesign,
     isSavingDesign,
-  }), [handleSaveEditedDesign, isSavingDesign])
+    handleScaleChange,
+    handleRotationChange,
+    handleReset,
+  }), [handleSaveEditedDesign, isSavingDesign, handleScaleChange, handleRotationChange, handleReset])
 
   return (
     <div className="flex h-full flex-col">
@@ -1367,7 +1470,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                 ? `⌀ ${dimensions.diameter}cm`
                 : `${dimensions.width}cm × ${dimensions.height}cm`}
             </div>
-            {imageData && (
+            {imageData && !isTouchDevice && (
               <button
                 onClick={() => setShowKeyboardHints(!showKeyboardHints)}
                 className="group flex items-center gap-1.5 rounded-full bg-indigo-900/40 px-3 py-2 text-xs font-medium text-indigo-300 shadow-md transition-all hover:bg-indigo-900/60"
@@ -1387,10 +1490,10 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
               onClick={() => open()}
               disabled={disabled || isUploading}
               className={clsx(
-                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
                 disabled || isUploading
                   ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
-                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
               )}
               title={imageData ? "Replace image" : "Upload image"}
             >
@@ -1404,12 +1507,12 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                   type="button"
                   onClick={handleUndo}
                   disabled={!canUndo}
-                  title="Undo (Ctrl+Z)"
+                  title="Undo"
                   className={clsx(
-                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
                     !canUndo
                       ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
-                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
                   )}
                 >
                   <Undo2 className="h-4 w-4" />
@@ -1419,12 +1522,12 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                   type="button"
                   onClick={handleRedo}
                   disabled={!canRedo}
-                  title="Redo (Ctrl+Y)"
+                  title="Redo"
                   className={clsx(
-                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                    "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
                     !canRedo
                       ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
-                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                      : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
                   )}
                 >
                   <Redo2 className="h-4 w-4" />
@@ -1437,12 +1540,12 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
               type="button"
               onClick={handleReset}
               disabled={!imageData}
-              title="Reset (R)"
+              title="Reset"
               className={clsx(
-                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200",
+                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
                 !imageData
                   ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
-                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 hover:scale-105"
+                  : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
               )}
             >
               <RefreshCcw className="h-4 w-4" />
@@ -1457,6 +1560,18 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
           <span>PNG, JPG, SVG, AI, PDF (300 DPI+)</span>
         </div>
 
+        {resolutionWarning && imageData && (
+          <div className="mt-3 flex items-center justify-center gap-2 text-xs text-amber-200">
+            <AlertCircle className="h-3.5 w-3.5 text-amber-300" />
+            <p className="text-center">
+              <span className="font-medium text-amber-100">
+                Low resolution (~{Math.round(resolutionWarning.detectedPpi)} PPI).
+              </span>{" "}
+              Recommended {resolutionWarning.recommended} PPI for best print quality.
+            </p>
+          </div>
+        )}
+
         {/* Error Messages - Top */}
         {(uploadError || editorError) && (
           <div className="animate-in fade-in slide-in-from-top-2 mx-auto max-w-2xl">
@@ -1470,19 +1585,29 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
 
       {/* Main Canvas Area - Flex Grow */}
       <div className="relative flex flex-1 gap-3 pt-4 md:gap-4">
-        {/* Zoom/Rotation Controls - Left Side */}
-        {imageData && renderSize.width > 0 && renderSize.height > 0 && (
-          <div className="hidden w-20 flex-shrink-0 md:flex">
-            <div className="sticky top-4 h-fit w-full rounded-2xl border border-neutral-700 bg-neutral-800/80 p-3 shadow-xl backdrop-blur-sm">
-              <DesignZoomTool
-                scale={scale}
-                rotation={rotation}
-                onScaleChange={handleScaleChange}
-                onRotationChange={handleRotationChange}
-              />
+        {/* Zoom/Rotation + Orientation Controls - Left Side (desktop) */}
+        {shouldShowControlPanel && (
+          <div className="hidden w-24 flex-shrink-0 md:flex">
+            <div className="sticky top-4 flex h-fit w-full flex-col gap-4 rounded-2xl border border-neutral-700 bg-neutral-800/80 p-3 shadow-xl backdrop-blur-sm">
+              {hasZoomControls && (
+                <DesignZoomTool
+                  scale={scale}
+                  rotation={rotation}
+                  onScaleChange={handleScaleChange}
+                  onRotationChange={handleRotationChange}
+                />
+              )}
+              {canAdjustOrientation && (
+                <OrientationToggle
+                  current={activeOrientation}
+                  onChange={onOrientationChange}
+                  layout="vertical"
+                />
+              )}
             </div>
           </div>
         )}
+
 
         {/* Canvas Container */}
         <div className="relative flex w-full flex-1 flex-col items-center justify-center p-4">
@@ -1491,10 +1616,9 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
             ref={containerRef}
             style={dropzoneStyle}
             className={clsx(
-              "relative overflow-hidden rounded-2xl border-2 border-neutral-700 shadow-2xl transition-all duration-300 ease-in-out hover:border-neutral-600",
-              actualBackgroundClass,
+              "relative h-full w-full transition-all duration-300 ease-in-out",
               {
-                "border-indigo-500/50 ring-4 ring-indigo-500/20": isDragActive,
+                "ring-4 ring-indigo-500/20": isDragActive,
               }
             )}
             onWheel={(event) => {
@@ -1509,14 +1633,31 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
             onTouchEnd={handleTouchEnd}
           >
             <input {...getInputProps()} />
-            <div className="pointer-events-none" style={boundaryOverlayStyle} />
 
-            {imageData && displaySize.width > 0 && displaySize.height > 0 ? (
+            {/* Sticker area overlay: reflects selected size */}
+            {stickerAreaSize.width > 0 && stickerAreaSize.height > 0 && (
               <div
-                className="absolute left-1/2 top-1/2"
+                className="pointer-events-none absolute left-1/2 top-1/2 z-[3]"
                 style={{
-                  width: displaySize.width,
-                  height: displaySize.height,
+                  width: stickerAreaSize.width,
+                  height: stickerAreaSize.height,
+                  transform: "translate(-50%, -50%)",
+                  transition: "width 240ms ease, height 240ms ease",
+                }}
+              >
+                {/* Outer cut/trim line */}
+                {bleedStyles && <div style={bleedStyles.outer} />}
+                {/* Inner safe/bleed margin indicator */}
+                {bleedStyles && <div style={bleedStyles.inner} />}
+              </div>
+            )}
+
+            {imageData && renderSize.width > 0 && renderSize.height > 0 ? (
+              <div
+                className="absolute left-1/2 top-1/2 z-[1]"
+                style={{
+                  width: renderSize.width,
+                  height: renderSize.height,
                   transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px)`
                 }}
               >
@@ -1534,15 +1675,19 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                     alt="Artwork preview"
                     draggable={false}
                     className="h-full w-full select-none object-contain"
-                    style={{ userSelect: "none", pointerEvents: "none" }}
+                    style={{
+                      userSelect: "none",
+                      pointerEvents: "none",
+                    }}
                   />
 
                   {isImageSelected && (
                     <>
                       <div
-                        className="pointer-events-none absolute inset-0 border-2 border-sky-400/80"
+                        className={selectionBorderClass}
                         style={{
-                          borderRadius: shapeStyles.borderRadius || (shape === "circle" ? "50%" : "12px"),
+                          borderRadius: "0px",
+                          borderWidth: `${2 * controlScaleCompensation}px`,
                         }}
                       />
                       {cornerHandles.map(({ key, style, cursor }) => (
@@ -1550,19 +1695,34 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                           key={key}
                           type="button"
                           aria-label="Resize design"
-                          className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-sky-400 shadow-sm"
-                          style={{ ...style, cursor }}
+                          className={handleAccentClass}
+                          style={{
+                            ...style,
+                            cursor,
+                            transform: `translate(-50%, -50%) scale(${controlScaleCompensation})`,
+                          }}
                           onPointerDown={startScaleHandleDrag}
                         />
                       ))}
                       <div className="pointer-events-none absolute left-1/2 top-0 flex -translate-x-1/2 -translate-y-full items-center justify-center">
-                        <span className="block h-6 w-px bg-sky-300/70" />
+                        <span
+                          className="block bg-sky-300/70"
+                          style={{
+                            width: "1px",
+                            height: `${24 * controlScaleCompensation}px`,
+                          }}
+                        />
                       </div>
                       <button
                         type="button"
                         aria-label="Rotate design"
-                        className="pointer-events-auto absolute left-1/2 top-0 h-4 w-4 -translate-x-1/2 -translate-y-[120%] rounded-full border border-white bg-sky-400 shadow"
-                        style={{ cursor: "grab" }}
+                        className={rotationHandleClass}
+                        style={{
+                          cursor: "grab",
+                          left: "50%",
+                          top: 0,
+                          transform: `translate(-50%, -120%) scale(${controlScaleCompensation})`,
+                        }}
                         onPointerDown={startRotateHandleDrag}
                       />
                     </>
@@ -1629,9 +1789,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                       </p>
                     </div>
                     <div className="mt-2 rounded-lg border border-neutral-700 bg-neutral-800/50 px-4 py-2 text-xs text-neutral-400">
-                      {isTouchDevice
-                        ? "Use pinch and drag gestures to adjust your design after uploading"
-                        : "Adjust zoom, rotation, and position before saving"}
+                      High-resolution PNG, JPG, SVG, AI, or PDF files (300 DPI+) yield the sharpest stickers.
                     </div>
                   </>
                 )}
@@ -1639,64 +1797,19 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
             )}
         </div>
 
-        {supportsOrientation(shape, dimensions) && (
-          <div className="mt-4 flex items-center justify-center gap-3">
-            {(["portrait", "landscape"] as Orientation[]).map((option) => {
-              const isSelected = (orientation ?? deriveOrientation(shape, dimensions)) === option
-              const isPortrait = option === "portrait"
-
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => onOrientationChange?.(option)}
-                  disabled={!onOrientationChange}
-                  aria-label={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
-                  title={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
-                  className={clsx(
-                    "relative flex h-12 w-10 items-center justify-center rounded-lg border transition",
-                    isSelected
-                      ? "border-indigo-300 bg-indigo-800/50 text-indigo-100 shadow-md"
-                      : "border-neutral-600/80 bg-neutral-800/70 text-neutral-300/80 hover:border-neutral-500 hover:text-neutral-100",
-                    !onOrientationChange && "cursor-not-allowed opacity-60"
-                  )}
-                >
-                  <span
-                    className={clsx(
-                      "pointer-events-none block rounded-md border",
-                      isPortrait ? "h-7 w-4" : "h-4 w-7",
-                      isSelected ? "border-white/80 bg-white/10" : "border-neutral-200/60 bg-neutral-300/10"
-                    )}
-                  />
-                  {isSelected && (
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <Check className="h-3.5 w-3.5 text-white" />
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+        {canAdjustOrientation && (
+          <div className="mt-6 flex items-center justify-center gap-2 md:hidden">
+            <span className="text-xs font-medium text-neutral-400">Orientation:</span>
+            <OrientationToggle
+              current={activeOrientation}
+              onChange={onOrientationChange}
+              layout="horizontal"
+            />
           </div>
         )}
       </div>
-    </div>
 
-      {/* Bottom Warnings - Outside canvas, visible above bottom bar */}
-      {resolutionWarning && imageData && (
-        <div className="mt-6 mb-2 animate-in fade-in slide-in-from-bottom-2">
-          <div className="flex items-start gap-3 rounded-xl border border-amber-500/50 bg-amber-900/90 p-4 shadow-2xl backdrop-blur-md">
-            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-300" />
-            <div className="flex-1 space-y-1">
-              <p className="text-sm font-semibold text-amber-100">
-                Low resolution detected (~{Math.round(resolutionWarning.detectedPpi)} PPI)
-              </p>
-              <p className="text-xs text-amber-200">
-                For best print quality we recommend at least {resolutionWarning.recommended} PPI. Consider uploading a higher-resolution or vector file to avoid blurry results.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+    </div>
 
       {uploadSuccess && imageData && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center animate-in fade-in duration-300">
@@ -1942,4 +2055,56 @@ function isPredominantlyDarkImage(img: HTMLImageElement): boolean {
 
   const averageBrightness = pixelCount > 0 ? totalBrightness / pixelCount : 255
   return averageBrightness < 128
+}
+interface OrientationToggleProps {
+  current: Orientation
+  onChange?: (orientation: Orientation) => void
+  className?: string
+  layout?: "horizontal" | "vertical"
+}
+
+const OrientationToggle = ({ current, onChange, className, layout = "horizontal" }: OrientationToggleProps) => {
+  const isVertical = layout === "vertical"
+
+  return (
+    <div
+      className={clsx(
+        "gap-3",
+        isVertical ? "flex flex-col w-full" : "flex items-center justify-center",
+        className
+      )}
+    >
+      {(["portrait", "landscape"] as Orientation[]).map((option) => {
+        const isSelected = current === option
+        const isPortrait = option === "portrait"
+
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange?.(option)}
+            disabled={!onChange}
+            aria-label={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
+            title={option === "portrait" ? "Portrait orientation" : "Landscape orientation"}
+            className={clsx(
+              "relative flex items-center justify-center rounded-md border text-[11px] font-medium uppercase tracking-wide transition",
+              isVertical ? "h-11 w-full" : "h-12 w-12",
+              isSelected
+                ? "border-indigo-300 bg-indigo-800/60 text-indigo-100 shadow-md"
+                : "border-neutral-600/70 bg-neutral-800/70 text-neutral-300 hover:border-neutral-500 hover:text-neutral-100",
+              !onChange && "cursor-not-allowed opacity-60"
+            )}
+          >
+            <div
+              className={clsx(
+                "pointer-events-none block rounded-[3px] border",
+                isPortrait ? "h-7 w-3" : "h-3 w-7",
+                isSelected ? "border-white/80 bg-white/20" : "border-neutral-200/60 bg-neutral-100/10"
+              )}
+            />
+          </button>
+        )
+      })}
+    </div>
+  )
 }

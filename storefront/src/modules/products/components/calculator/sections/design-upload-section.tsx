@@ -4,6 +4,7 @@ import { Dimensions } from "../types"
 import { DesignDraftState } from "../utils/design-storage"
 import StepCard from "./step-card"
 import type { Orientation } from "../orientation"
+import MobileControlRail from "../mobile-control-rail"
 
 interface DesignUploadSectionProps {
   shape: Shape
@@ -13,6 +14,12 @@ interface DesignUploadSectionProps {
   orientation?: Orientation
   onOrientationChange?: (orientation: Orientation) => void
   disabled?: boolean
+  quantity?: number
+  onShapeChange?: (shape: Shape) => void
+  onSizeChange?: (dimensions: Dimensions) => void
+  onQuantityChange?: (quantity: number) => void
+  onOrientationToggle?: () => void
+  canAdjustOrientation?: boolean
 }
 
 export default function DesignUploadSection({
@@ -23,6 +30,12 @@ export default function DesignUploadSection({
   orientation,
   onOrientationChange,
   disabled,
+  quantity,
+  onShapeChange,
+  onSizeChange,
+  onQuantityChange,
+  onOrientationToggle,
+  canAdjustOrientation,
 }: DesignUploadSectionProps) {
   return (
     <StepCard
@@ -41,6 +54,24 @@ export default function DesignUploadSection({
         disabled={disabled}
         compact={false}
       />
+      {typeof quantity === "number" &&
+        onShapeChange &&
+        onSizeChange &&
+        onQuantityChange && (
+          <div className="md:hidden">
+            <MobileControlRail
+              shape={shape}
+              dimensions={dimensions}
+              quantity={quantity}
+              onShapeChange={onShapeChange}
+              onSizeChange={onSizeChange}
+              onQuantityChange={onQuantityChange}
+              orientation={orientation}
+              onOrientationToggle={onOrientationToggle}
+              canAdjustOrientation={canAdjustOrientation}
+            />
+          </div>
+        )}
     </StepCard>
   )
 }

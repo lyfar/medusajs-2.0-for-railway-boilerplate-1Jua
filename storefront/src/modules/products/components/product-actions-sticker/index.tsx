@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@medusajs/ui"
+import clsx from "clsx"
 import { Popover, Transition } from "@headlessui/react"
 import { useParams } from "next/navigation"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -12,6 +13,7 @@ import { Shape } from "../calculator/shape-selector"
 import { useShapeStickerPricing } from "@lib/hooks/use-shape-sticker-pricing"
 import { DesignDraftState, createFileFromStoredAsset } from "../calculator/utils/design-storage"
 import { Dimensions } from "../calculator/types"
+import MobileControlRail from "../calculator/mobile-control-rail"
 import { getPresignedUploadUrl, uploadFileToPresignedUrl } from "@lib/data/uploads"
 import ImageDropZone, {
   ImageDropZoneHandle,
@@ -293,6 +295,80 @@ export default function ProductActionsSticker({
     return regularPrice / quantity
   }, [regularPrice, quantity])
 
+  const canAdjustOrientation = supportsOrientation(shape, dimensions)
+
+  const formattedShape = useMemo(() => {
+    return shape.charAt(0).toUpperCase() + shape.slice(1)
+  }, [shape])
+
+  const formattedSize = useMemo(() => {
+    if (dimensions.diameter) {
+      return `${dimensions.diameter} cm`
+    }
+    if (dimensions.width && dimensions.height) {
+      return `${dimensions.width} × ${dimensions.height} cm`
+    }
+    return null
+  }, [dimensions.diameter, dimensions.width, dimensions.height])
+
+  const formattedOrientation = useMemo(() => {
+    if (!orientation) return null
+    return orientation.charAt(0).toUpperCase() + orientation.slice(1)
+  }, [orientation])
+
+  const isSavingDesign = imageDropZoneRef.current?.isSavingDesign
+
+  const isCtaDisabled = useMemo(() => {
+    if (!selectedVariant || !inStock || !!disabled || isAdding || isSavingDesign) {
+      return true
+    }
+    return false
+  }, [selectedVariant, inStock, disabled, isAdding, isSavingDesign])
+
+  const primaryCtaLabel = useMemo(() => {
+    if (!selectedVariant) return "Select variant"
+    if (!inStock) return "Out of stock"
+    if (isSavingDesign) return "Saving design..."
+    if (!designReady) return "Save your design"
+    return "Add to cart"
+  }, [selectedVariant, inStock, isSavingDesign, designReady])
+
+  const desktopCtaLabel = useMemo(() => {
+    if (lastPricing) {
+      return `${primaryCtaLabel} • $${lastPricing.totalPrice.toFixed(2)}`
+    }
+    return primaryCtaLabel
+  }, [primaryCtaLabel, lastPricing])
+
+  const mobileCtaLabel = useMemo(() => {
+    if (lastPricing) {
+      return `Add to cart • $${lastPricing.totalPrice.toFixed(2)}`
+    }
+    return primaryCtaLabel
+  }, [lastPricing, primaryCtaLabel])
+
+  const desktopCtaClasses = useMemo(
+    () =>
+      clsx(
+        "h-12 w-full flex-shrink-0 text-sm font-semibold sm:h-14 sm:text-base transition-colors",
+        !isCtaDisabled
+          ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white"
+          : ""
+      ),
+    [isCtaDisabled]
+  )
+
+  const mobileCtaClasses = useMemo(
+    () =>
+      clsx(
+        "h-14 flex-1 text-base font-semibold transition-all rounded-2xl active:scale-98",
+        !isCtaDisabled
+          ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white shadow-lg"
+          : ""
+      ),
+    [isCtaDisabled]
+  )
+
   const uploadDesignAssets = useCallback(async (draft: DesignDraftState) => {
     if (!draft.original || !draft.edited) {
       throw new Error("Please upload and save your design before adding it to the cart.")
@@ -390,6 +466,14 @@ export default function ProductActionsSticker({
     [shape, dimensions]
   )
 
+  const handleOrientationToggle = useCallback(() => {
+    if (!canAdjustOrientation) {
+      return
+    }
+    const nextOrientation: Orientation = orientation === "portrait" ? "landscape" : "portrait"
+    handleOrientationChange(nextOrientation)
+  }, [canAdjustOrientation, orientation, handleOrientationChange])
+
   const handleButtonClick = async () => {
     if (!designReady) {
       await imageDropZoneRef.current?.saveDesign()
@@ -400,7 +484,7 @@ export default function ProductActionsSticker({
   }
 
   const handleAddToCart = async () => {
-    if (!selectedVariant?.id || !lastPricing || !designDraft) {
+    if (!selectedVariant?.id || !designDraft) {
       setDesignError("Please complete your design before adding to the cart.")
       return null
     }
@@ -409,6 +493,16 @@ export default function ProductActionsSticker({
     setDesignError(null)
 
     try {
+      let pricingForCart = lastPricing
+      if (!pricingForCart) {
+        pricingForCart = await calculatePricing(quantity, shape, dimensions, selectedVariant.id)
+        if (!pricingForCart) {
+          setDesignError("Pricing is still being calculated. Please try again in a moment.")
+          setIsAdding(false)
+          return null
+        }
+      }
+
       const uploads = await uploadDesignAssets(designDraft)
 
       await addStickerToCart({
@@ -425,11 +519,11 @@ export default function ProductActionsSticker({
           dimensions,
           transformations: designDraft.lastTransformations ?? designDraft.transformations,
           pricing: {
-            unitPrice: lastPricing.unitPrice,
-            totalPrice: lastPricing.totalPrice,
-            basePrice: lastPricing.basePrice,
-            scalingFactor: lastPricing.scalingFactor,
-            area: lastPricing.area,
+            unitPrice: pricingForCart.unitPrice,
+            totalPrice: pricingForCart.totalPrice,
+            basePrice: pricingForCart.basePrice,
+            scalingFactor: pricingForCart.scalingFactor,
+            area: pricingForCart.area,
           },
         },
       })
@@ -459,7 +553,7 @@ export default function ProductActionsSticker({
             backgroundPosition: backgroundPattern ? "center" : undefined,
           }}
         >
-          <div className="relative flex h-full w-full flex-col p-4 pb-24 sm:p-6 sm:pb-28 lg:min-h-0 lg:p-8 lg:pb-12">
+          <div className="relative flex h-full w-full flex-col p-4 pb-12 sm:p-6 sm:pb-20 lg:min-h-0 lg:p-8 lg:pb-12">
             <div className="flex-1">
               <ImageDropZone
                 ref={imageDropZoneRef}
@@ -477,29 +571,30 @@ export default function ProductActionsSticker({
         </div>
 
         <div className="flex w-full flex-col border-t border-ui-border-subtle bg-ui-bg-base lg:sticky lg:top-0 lg:h-full lg:w-1/3 lg:border-l lg:border-t-0 lg:border-ui-border-subtle">
-          <div className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-28 lg:p-8">
-            <div className="space-y-10">
-              <section id="shape" className="space-y-4 scroll-mt-24">
+          <div className="flex-1 overflow-y-auto p-4 pt-4 pb-14 sm:p-6 sm:pt-8 sm:pb-24 lg:p-8">
+            <div className="space-y-8">
+              <section id="shape" className="hidden space-y-4 scroll-mt-24 sm:block">
                 <h3 className="text-sm font-medium text-ui-fg-muted">Shape</h3>
                 <ShapeSelector selectedShape={shape} onShapeChange={setShape} />
               </section>
 
-              <section id="size" className="space-y-4 scroll-mt-24">
+              <section id="size" className="hidden space-y-4 scroll-mt-24 sm:block">
                 <h3 className="text-sm font-medium text-ui-fg-muted">Size</h3>
                 <SizeInput shape={shape} dimensions={dimensions} onSizeChange={handleDimensionsChange} />
               </section>
 
-              <section id="quantity" className="space-y-4 scroll-mt-24">
+              <section id="quantity" className="hidden space-y-4 scroll-mt-24 sm:block">
                 <h3 className="text-sm font-medium text-ui-fg-muted">Quantity</h3>
-                <QuantitySelector onQuantityChange={setQuantity} />
+                <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
               </section>
             </div>
           </div>
 
           <div className="lg:sticky lg:bottom-0 lg:left-0 lg:right-0 lg:border-t lg:border-ui-border-subtle lg:bg-ui-bg-base lg:p-0">
-            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-ui-border-subtle bg-ui-bg-base px-4 py-3 shadow-md sm:py-4 lg:static lg:z-auto lg:px-0 lg:shadow-none">
-              <div className="flex w-full flex-col gap-3 sm:gap-4">
-                <div className="flex flex-col gap-4 rounded-rounded border border-ui-border-subtle bg-ui-bg-subtle px-5 py-4 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
+            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-ui-border-subtle bg-ui-bg-base px-4 py-3 shadow-[0_-6px_20px_rgba(0,0,0,0.25)] sm:sticky sm:bottom-0 sm:left-0 sm:right-0 sm:z-40 sm:py-4 lg:static lg:z-auto lg:px-0 lg:shadow-none">
+              {/* Desktop layout */}
+                <div className="hidden w-full flex-col gap-2 sm:flex">
+                <div className="flex flex-col gap-3 rounded-rounded border border-ui-border-subtle bg-ui-bg-subtle px-4 py-3 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
                   <div className="flex flex-col gap-2">
                     <span className="text-[11px] uppercase tracking-wide text-ui-fg-muted">
                       {designReady ? "Total" : "Starting from"}
@@ -584,36 +679,76 @@ export default function ProductActionsSticker({
 
                 <Button
                   onClick={handleButtonClick}
-                  disabled={
-                    !inStock ||
-                    !selectedVariant ||
-                    !!disabled ||
-                    isAdding ||
-                    pricingLoading ||
-                    !lastPricing ||
-                    imageDropZoneRef.current?.isSavingDesign
-                  }
+                  disabled={isCtaDisabled}
                   variant="primary"
-                  className="h-12 w-full flex-shrink-0 text-sm font-semibold sm:h-14 sm:text-base"
-                  isLoading={isAdding || imageDropZoneRef.current?.isSavingDesign}
+                  className={desktopCtaClasses}
+                  isLoading={isAdding || isSavingDesign}
                   data-testid="add-product-button"
                 >
-                  {!selectedVariant
-                    ? "Select variant"
-                    : !inStock
-                    ? "Out of stock"
-                    : imageDropZoneRef.current?.isSavingDesign
-                    ? "Saving design..."
-                    : !designReady
-                    ? "Save your design"
-                    : lastPricing
-                    ? "Add to cart"
-                    : "Configure stickers"}
+                  {desktopCtaLabel}
                 </Button>
+              </div>
+
+              {/* Mobile compact summary */}
+              <div className="relative flex flex-col gap-3 sm:hidden">
+                <div className="rounded-3xl border border-ui-border-subtle bg-ui-bg-base/95 p-4 shadow-[0_15px_45px_rgba(0,0,0,0.45)] backdrop-blur">
+                  <MobileControlRail
+                    shape={shape}
+                    dimensions={dimensions}
+                    quantity={quantity}
+                    onShapeChange={setShape}
+                    onSizeChange={handleDimensionsChange}
+                    onQuantityChange={setQuantity}
+                    orientation={orientation}
+                    onOrientationToggle={canAdjustOrientation ? handleOrientationToggle : undefined}
+                    canAdjustOrientation={canAdjustOrientation}
+                  />
+                  <div className="mt-3 flex flex-col gap-2">
+                    {lastPricing ? (
+                      <div className="flex items-center justify-between rounded-2xl border border-white/10 px-3 py-2 text-sm text-white">
+                        <span className="text-white/70">Total</span>
+                        <span className="font-semibold">${lastPricing.totalPrice.toFixed(2)}</span>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/60">
+                        Upload and save your design to preview pricing.
+                      </div>
+                    )}
+                    <div className="flex items-center">
+                    <Button
+                      onClick={handleButtonClick}
+                      disabled={isCtaDisabled}
+                      variant="primary"
+                      className={mobileCtaClasses}
+                      isLoading={isAdding || isSavingDesign}
+                      data-testid="mobile-add-product-button"
+                    >
+                      {mobileCtaLabel}
+                    </Button>
+                    </div>
+                  </div>
+                  {!designReady && !isSavingDesign && designDraft?.original && (
+                    <p className="mt-3 text-center text-[11px] font-medium text-amber-200">
+                      Save your latest tweaks to unlock checkout.
+                    </p>
+                  )}
+                  {!designDraft?.original && (
+                    <p className="mt-3 text-center text-[11px] font-medium text-indigo-200">
+                      Upload artwork above to activate all controls.
+                    </p>
+                  )}
+                </div>
+                {designError && (
+                  <div className="flex items-center gap-1.5 text-xs text-ui-fg-error">
+                    <div className="h-1 w-1 flex-shrink-0 rounded-full bg-ui-fg-error"></div>
+                    <span className="line-clamp-1">{designError}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
+        <div className="h-[130px] sm:hidden" aria-hidden="true" />
       </div>
     </div>
   )
