@@ -6,6 +6,7 @@ import {
   StickerPricingCalculatorOptions,
   StickerShape,
   ShapePricingParams,
+  StickerMaterial,
 } from "./pricing-calculator"
 import type { Context } from "@medusajs/framework/types"
 
@@ -194,13 +195,14 @@ class StickerPricingService extends MedusaService({
     quantity: number,
     shape: StickerShape,
     dimensions?: { width?: number; height?: number; diameter?: number },
-    variantId?: string
+    variantId?: string,
+    material?: StickerMaterial
   ) {
     const calculator = variantId
       ? await this.getCalculatorForVariant(variantId)
       : this.defaultCalculator
 
-    return calculator.calculateShapePricing(quantity, shape, dimensions, variantId)
+    return calculator.calculateShapePricing(quantity, shape, dimensions, variantId, material)
   }
 
   private async getPricingOverridesForVariant(
@@ -386,4 +388,4 @@ class StickerPricingService extends MedusaService({
   }
 }
 
-export default StickerPricingService 
+export default StickerPricingService

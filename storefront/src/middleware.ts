@@ -5,6 +5,9 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_MEDUSA_BACKEND_URL
 const PUBLISHABLE_API_KEY = process.env.NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY
 const DEFAULT_REGION = process.env.NEXT_PUBLIC_DEFAULT_REGION || "us"
 
+const REGION_CACHE_TTL =
+  Number(process.env.NEXT_PUBLIC_REGION_CACHE_TTL_MS || "0") || 0
+
 const regionMapCache = {
   regionMap: new Map<string, HttpTypes.StoreRegion>(),
   regionMapUpdated: Date.now(),
@@ -13,10 +16,12 @@ const regionMapCache = {
 async function getRegionMap() {
   const { regionMap, regionMapUpdated } = regionMapCache
 
-  if (
+  const shouldRefresh =
     !regionMap.keys().next().value ||
-    regionMapUpdated < Date.now() - 3600 * 1000
-  ) {
+    !REGION_CACHE_TTL ||
+    regionMapUpdated < Date.now() - REGION_CACHE_TTL
+
+  if (shouldRefresh) {
     if (!BACKEND_URL || !PUBLISHABLE_API_KEY) {
       if (process.env.NODE_ENV === "development") {
         console.warn(
@@ -31,10 +36,6 @@ async function getRegionMap() {
       const response = await fetch(`${BACKEND_URL}/store/regions`, {
         headers: {
           "x-publishable-api-key": PUBLISHABLE_API_KEY!,
-        },
-        next: {
-          revalidate: 3600,
-          tags: ["regions"],
         },
       })
 

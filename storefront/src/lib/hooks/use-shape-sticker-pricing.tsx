@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Shape } from '@modules/products/components/calculator/shape-selector';
+import { Material } from '@modules/products/components/calculator/types';
 
 interface Dimensions {
   width?: number
@@ -20,10 +21,11 @@ interface PricingResult {
   area: number
   shape: Shape
   dimensions: Dimensions
+  material: Material
 }
 
 interface UseShapeStickerPricingReturn {
-  calculatePricing: (quantity: number, shape: Shape, dimensions?: Dimensions, variantId?: string) => Promise<PricingResult | null>
+  calculatePricing: (quantity: number, shape: Shape, dimensions?: Dimensions, variantId?: string, material?: Material) => Promise<PricingResult | null>
   isLoading: boolean
   error: string | null
   lastPricing: PricingResult | null
@@ -38,7 +40,8 @@ export function useShapeStickerPricing(): UseShapeStickerPricingReturn {
     quantity: number,
     shape: Shape,
     dimensions?: Dimensions,
-    variantId?: string
+    variantId?: string,
+    material: Material = 'vinyl'
   ): Promise<PricingResult | null> => {
     setIsLoading(true)
     setError(null)
@@ -62,7 +65,8 @@ export function useShapeStickerPricing(): UseShapeStickerPricingReturn {
           quantity,
           shape,
           dimensions,
-          variantId
+          variantId,
+          material
         }),
       })
 

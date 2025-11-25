@@ -1,5 +1,6 @@
 import { clx } from "@medusajs/ui"
 import { PropsWithChildren } from "react"
+import { InfoPopover } from "./info-popover"
 
 interface StepCardProps extends PropsWithChildren {
   step?: number
@@ -7,6 +8,8 @@ interface StepCardProps extends PropsWithChildren {
   description?: string
   className?: string
   contentClassName?: string
+  infoTitle?: string
+  infoDescription?: string
 }
 
 export default function StepCard({
@@ -15,6 +18,8 @@ export default function StepCard({
   description,
   className,
   contentClassName,
+  infoTitle,
+  infoDescription,
   children,
 }: StepCardProps) {
   return (
@@ -26,7 +31,12 @@ export default function StepCard({
           </div>
         )}
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold text-white">{title}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-semibold text-white">{title}</h3>
+            {infoTitle && infoDescription && (
+              <InfoPopover title={infoTitle} description={infoDescription} variant="dark" />
+            )}
+          </div>
           {description && <p className="text-sm text-neutral-400">{description}</p>}
         </div>
       </div>

@@ -13,11 +13,19 @@ type QuantityOption = '500' | '1000' | '2000' | '5000' | 'Custom';
 // Predefined quantity options with marketing names
 const quantityMappings: Record<QuantityOption, { quantity: number | null, name: string, description: string }> = {
   '500': { quantity: 500, name: 'Starter', description: '500 pieces' },
-  '1000': { quantity: 1000, name: 'Business', description: '1,000 pieces' },
+  '1000': { quantity: 1000, name: 'Expand', description: '1,000 pieces' },
   '2000': { quantity: 2000, name: 'Growth', description: '2,000 pieces' },
   '5000': { quantity: 5000, name: 'Volume', description: '5,000 pieces' },
   'Custom': { quantity: null, name: 'Custom', description: 'Set your quantity' }
 };
+
+const quantityVisuals: Record<QuantityOption, { label: string }> = {
+  '500': { label: '500' },
+  '1000': { label: '1k' },
+  '2000': { label: '2k' },
+  '5000': { label: '5k' },
+  'Custom': { label: 'C' }
+}
 
 const determineOption = (quantity: number): QuantityOption => {
   const match = (Object.keys(quantityMappings) as QuantityOption[]).find((option) => {
@@ -87,16 +95,30 @@ export default function QuantitySelector({ quantity, onQuantityChange }: Quantit
               key={option}
               onClick={() => handleQuantitySelect(option)}
               className={clsx(
-                'h-full w-full rounded-lg border px-3 py-3.5 text-left text-sm transition-all active:scale-95 min-h-[60px] sm:min-h-[68px]',
+                'group flex items-center gap-3 rounded-rounded border px-3.5 py-3 text-left text-sm transition-all min-h-[60px] sm:min-h-[68px]',
                 isSelected
-                  ? 'border-ui-border-strong bg-ui-bg-field text-ui-fg-base shadow-elevation-card-hover ring-2 ring-indigo-500/20'
-                  : 'border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-base hover:text-ui-fg-base active:bg-ui-bg-field'
+                  ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white'
+                  : 'border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900 active:bg-neutral-900'
               )}
             >
-              <div className="text-sm font-semibold text-ui-fg-base leading-tight">
-                {getQuantityLabel(option)}
+              <div
+                className={clsx(
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-md border text-[11px] font-bold uppercase transition',
+                  isSelected
+                    ? 'border-indigo-300 text-white bg-indigo-500/10 shadow-sm ring-1 ring-indigo-300/60'
+                    : 'border-neutral-600 text-neutral-200 bg-neutral-900 ring-1 ring-neutral-800'
+                )}
+              >
+                {quantityVisuals[option].label}
               </div>
-              <div className="text-xs text-ui-fg-muted mt-1 leading-tight">{getQuantityDisplay(option)}</div>
+              <div className="flex flex-col gap-0.5">
+                <span className={clsx('font-semibold text-xs leading-tight', isSelected ? 'text-white' : 'text-neutral-100')}>
+                  {getQuantityLabel(option)}
+                </span>
+                <span className={clsx('text-[11px] leading-tight', isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
+                  {getQuantityDisplay(option)}
+                </span>
+              </div>
             </button>
           )
         })}

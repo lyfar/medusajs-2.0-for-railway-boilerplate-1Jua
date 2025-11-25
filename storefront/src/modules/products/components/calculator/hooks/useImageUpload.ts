@@ -2,14 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import {
   blobToDataUrl,
+  clearDesignAssets,
   clearDesignState,
   DesignDraftState,
-  estimateDataUrlSize,
   fileToDataUrl,
   generateDesignId,
+  generatePreviewDataUrl,
   readDesignState,
+  shouldEmbedInlineAsset,
   StoredDimensions,
   StoredUploadPreviewKind,
+  storeDesignAssetBlob,
   updateDesignState,
 } from "../utils/design-storage"
 import { Shape } from "../shape-selector"
@@ -136,23 +139,36 @@ export function useImageUpload({
       setUploadState("uploading")
 
       try {
-        const baseOriginalDataUrl =
-          typeof originalDataUrl === "string" ? originalDataUrl : await fileToDataUrl(file)
+        const designId = designState?.id ?? generateDesignId()
+        const inlineDataUrl =
+          typeof originalDataUrl === "string"
+            ? originalDataUrl
+            : shouldEmbedInlineAsset(file)
+              ? await fileToDataUrl(file)
+              : undefined
+        const previewUrl =
+          typeof previewDataUrl === "string"
+            ? previewDataUrl
+            : await generatePreviewDataUrl(file)
+        const storageInfo = await storeDesignAssetBlob(designId, "original", file)
+
         const nextState = handleDesignUpdate((prev) => {
-          const id = prev?.id ?? generateDesignId()
+          const id = prev?.id ?? designId
           return {
             id,
             original: {
               name: file.name,
               type: file.type,
-              dataUrl: baseOriginalDataUrl,
+              dataUrl: inlineDataUrl,
               lastModified: file.lastModified,
               size: file.size,
+              storageKey: storageInfo.storageKey,
+              storageDriver: storageInfo.storageDriver,
             },
             // Reset edited design because original artwork changed
             edited: undefined,
             previewKind,
-            previewDataUrl: previewDataUrl ?? undefined,
+            previewDataUrl: previewUrl ?? inlineDataUrl ?? undefined,
             transformations: {
               scale: 1,
               rotation: 0,
@@ -176,7 +192,7 @@ export function useImageUpload({
         throw error
       }
     },
-    [disabled, handleDesignUpdate]
+    [designState, disabled, handleDesignUpdate]
   )
 
   const saveEditedAsset = useCallback(
@@ -189,21 +205,26 @@ export function useImageUpload({
       setUploadState("uploading")
 
       try {
-        const dataUrl = await blobToDataUrl(blob)
+        const designId = designState?.id ?? generateDesignId()
+        const storageInfo = await storeDesignAssetBlob(designId, "edited", blob)
+        const inlineDataUrl = shouldEmbedInlineAsset(blob) ? await blobToDataUrl(blob) : undefined
         const nextState = handleDesignUpdate((prev) => {
           if (!prev?.original) {
             throw new Error("Upload artwork before saving your edited design.")
           }
 
+          const id = prev.id ?? designId
           return {
             ...prev,
-            id: prev.id ?? generateDesignId(),
+            id,
             edited: {
               name: fileName,
               type: mimeType,
-              dataUrl,
+              dataUrl: inlineDataUrl,
               lastModified: Date.now(),
-              size: blob.size || estimateDataUrlSize(dataUrl),
+              size: blob.size || inlineDataUrl?.length,
+              storageKey: storageInfo.storageKey,
+              storageDriver: storageInfo.storageDriver,
             },
             // Keep the original image as preview and maintain transformations
             // The edited (rendered) image is stored for cart upload only
@@ -227,13 +248,17 @@ export function useImageUpload({
         throw error
       }
     },
-    [disabled, handleDesignUpdate, scheduleSuccessReset]
+    [designState, disabled, handleDesignUpdate, scheduleSuccessReset]
   )
 
   const clearDesign = useCallback(() => {
+    const designId = designState?.id
     clearDesignState()
     setDesignState(null)
-  }, [])
+    if (designId) {
+      void clearDesignAssets(designId)
+    }
+  }, [designState?.id])
 
   return {
     uploadState,

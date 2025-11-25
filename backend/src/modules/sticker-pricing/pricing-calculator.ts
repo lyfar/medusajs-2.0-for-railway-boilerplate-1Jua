@@ -14,11 +14,22 @@ export interface StickerPricingConfig {
 }
 
 export type StickerShape = 'rectangle' | 'square' | 'circle' | 'diecut';
+export type StickerMaterial = 
+  | 'vinyl' 
+  | 'egg_shell'
+  | 'hologram_egg_shell'
+  | 'transparent_egg_shell'
+  | 'gold_silver_foil'
+  | 'uv_gloss';
 
 export interface ShapePricingParams {
   F_S: number;  // Fixed setup cost
   k_S: number;  // Variable cost multiplier based on area
   delta: number; // Scaling exponent for quantity discounts
+}
+
+export interface MaterialPricingParams {
+  factor: number;
 }
 
 export interface StickerDimensions {
@@ -46,7 +57,17 @@ export class StickerPricingCalculator {
     rectangle: { F_S: 100, k_S: 0.5, delta: 0.8 },
     square: { F_S: 100, k_S: 0.5, delta: 0.8 },
     circle: { F_S: 120, k_S: 0.6, delta: 0.8 },
-    diecut: { F_S: 1500, k_S: 0.7, delta: 0.8 },
+    diecut: { F_S: 150, k_S: 1.9, delta: 0.55 },
+  };
+
+  // Baseline material parameters
+  private readonly BASE_MATERIAL_PRICING_PARAMS: Record<StickerMaterial, MaterialPricingParams> = {
+    vinyl: { factor: 1.0 },
+    egg_shell: { factor: 1.0 },
+    hologram_egg_shell: { factor: 1.3 },
+    transparent_egg_shell: { factor: 1.3 },
+    gold_silver_foil: { factor: 1.3 },
+    uv_gloss: { factor: 1.3 },
   };
 
   // Default dimensions for each shape (in cm)
@@ -81,6 +102,9 @@ export class StickerPricingCalculator {
             minQuantity: tier.minQuantity,
             maxQuantity: tier.maxQuantity ?? null,
             pricePerUnit: tier.pricePerUnit,
+            // @ts-ignore - handling potential extra fields
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...tier
           }))
         : [...this.DEFAULT_PRICING_TIERS];
 
@@ -159,7 +183,8 @@ export class StickerPricingCalculator {
     quantity: number,
     shape: StickerShape = 'rectangle',
     dimensions?: StickerDimensions,
-    variantId?: string
+    variantId?: string,
+    material: StickerMaterial = 'vinyl'
   ): {
     unitPrice: number;
     totalPrice: number;
@@ -169,6 +194,7 @@ export class StickerPricingCalculator {
     area: number;
     shape: StickerShape;
     dimensions: StickerDimensions;
+    material: StickerMaterial;
   } {
     // Use shared validation logic
     const validation = validateStickerQuantity(quantity, this.moq);
@@ -185,9 +211,11 @@ export class StickerPricingCalculator {
     const finalDimensions = dimensions || this.DEFAULT_DIMENSIONS[shape];
     const area = this.calculateArea(shape, finalDimensions);
     const params = this.shapePricingParams[shape];
+    const materialParams = this.BASE_MATERIAL_PRICING_PARAMS[material] || this.BASE_MATERIAL_PRICING_PARAMS.vinyl;
 
-    // Calculate base price: F_S + k_S * area
-    const basePrice = params.F_S + (params.k_S * area);
+    // Calculate base price: (F_S + k_S * area) * materialFactor
+    const shapeBasePrice = params.F_S + (params.k_S * area);
+    const basePrice = shapeBasePrice * materialParams.factor;
 
     // Calculate scaling factor: (quantity / 500) ^ delta
     const scalingFactor = Math.pow(quantity / this.moq, params.delta);
@@ -205,7 +233,8 @@ export class StickerPricingCalculator {
       scalingFactor,
       area,
       shape,
-      dimensions: finalDimensions
+      dimensions: finalDimensions,
+      material
     };
   }
 
@@ -300,6 +329,13 @@ export class StickerPricingCalculator {
   }
 
   /**
+   * Get all available materials with their pricing parameters
+   */
+  getAllMaterialPricingParams(): Record<StickerMaterial, MaterialPricingParams> {
+    return { ...this.BASE_MATERIAL_PRICING_PARAMS };
+  }
+
+  /**
    * Get default dimensions for a shape
    */
   getDefaultDimensions(shape: StickerShape): StickerDimensions {
@@ -358,4 +394,4 @@ export class StickerPricingCalculator {
       totalSavings
     };
   }
-} 
+}

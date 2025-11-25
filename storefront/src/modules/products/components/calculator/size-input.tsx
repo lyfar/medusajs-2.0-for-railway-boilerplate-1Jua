@@ -23,6 +23,14 @@ const sizeMappings: Record<Shape, Record<SizeOption, Dimensions>> = {
   diecut: { ...SIZE_PRESETS.diecut, Custom: {} }
 };
 
+const sizeVisuals: Record<SizeOption, { label: string }> = {
+  S: { label: 'S' },
+  M: { label: 'M' },
+  L: { label: 'L' },
+  XL: { label: 'XL' },
+  Custom: { label: 'C' }
+}
+
 export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInputProps) {
   const [selectedSize, setSelectedSize] = useState<SizeOption>('L');
   const [customDimensions, setCustomDimensions] = useState<Dimensions>({
@@ -165,15 +173,27 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
               key={size}
               onClick={() => handleSizeSelect(size)}
               className={clsx(
-                'h-full w-full rounded-rounded border px-4 py-3 text-left text-sm font-medium transition-colors',
+                'group flex items-center gap-3 rounded-rounded border px-3.5 py-3 text-left text-sm transition-all h-full',
                 isSelected
-                  ? 'border-ui-border-strong bg-ui-bg-field text-ui-fg-base shadow-elevation-card-hover'
-                  : 'border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-base hover:text-ui-fg-base'
+                  ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white'
+                  : 'border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900'
               )}
             >
-              <div className="text-xs uppercase tracking-wide text-ui-fg-muted">{size}</div>
-              <div className={clsx('text-sm font-semibold', isSelected ? 'text-ui-fg-base' : 'text-ui-fg-subtle')}>
-                {getDimensionDisplay(size)}
+              <div
+                className={clsx(
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase transition',
+                  isSelected
+                    ? 'border-indigo-300 text-white bg-indigo-500/10 shadow-sm ring-1 ring-indigo-300/60'
+                    : 'border-neutral-600 text-neutral-200 bg-neutral-900 ring-1 ring-neutral-800'
+                )}
+              >
+                {sizeVisuals[size].label}
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className={clsx('font-semibold text-xs', isSelected ? 'text-white' : 'text-neutral-100')}>{size}</span>
+                <span className={clsx('text-[11px] leading-tight', isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
+                  {getDimensionDisplay(size)}
+                </span>
               </div>
             </button>
           )

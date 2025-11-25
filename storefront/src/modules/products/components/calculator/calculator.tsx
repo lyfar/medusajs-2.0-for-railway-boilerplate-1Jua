@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Shape } from './shape-selector';
-import { Dimensions } from './types';
+import { Dimensions, Material, Format, Peeling } from './types';
 import { DesignDraftState } from './utils/design-storage';
 import { type AutoConfigureSuggestion } from './image-drop-zone';
 import { deriveOrientation, applyOrientationToDimensions, supportsOrientation, type Orientation } from './orientation';
@@ -11,6 +11,9 @@ import {
   QuantitySection,
   ShapeSection,
   SizeSection,
+  MaterialSection,
+  FormatSection,
+  PeelingSection,
 } from './sections';
 
 interface CalculatorProps {
@@ -18,7 +21,10 @@ interface CalculatorProps {
     shape: Shape,
     dimensions: Dimensions,
     quantity: number,
-    designDraft: DesignDraftState | null
+    designDraft: DesignDraftState | null,
+    material: Material,
+    format: Format,
+    peeling: Peeling
   ) => void;
   disabled?: boolean;
 }
@@ -32,6 +38,9 @@ const defaultDimensions: Record<Shape, Dimensions> = {
 
 export default function Calculator({ onStateChange, disabled }: CalculatorProps) {
   const [shape, setShape] = useState<Shape>('rectangle');
+  const [material, setMaterial] = useState<Material>('vinyl');
+  const [format, setFormat] = useState<Format>('sheets');
+  const [peeling, setPeeling] = useState<Peeling>('easy_peel');
   const [dimensions, setDimensions] = useState<Dimensions>({});
   const [orientation, setOrientation] = useState<Orientation>(deriveOrientation('rectangle', defaultDimensions.rectangle));
   const [quantity, setQuantity] = useState(500);
@@ -50,12 +59,24 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
 
   useEffect(() => {
     if (onStateChange) {
-      onStateChange(shape, dimensions, quantity, designDraft);
+      onStateChange(shape, dimensions, quantity, designDraft, material, format, peeling);
     }
-  }, [shape, dimensions, quantity, designDraft, onStateChange]);
+  }, [shape, dimensions, quantity, designDraft, material, format, peeling, onStateChange]);
 
   const handleShapeChange = useCallback((newShape: Shape) => {
     setShape(newShape);
+  }, []);
+
+  const handleMaterialChange = useCallback((newMaterial: Material) => {
+    setMaterial(newMaterial);
+  }, []);
+
+  const handleFormatChange = useCallback((newFormat: Format) => {
+    setFormat(newFormat);
+  }, []);
+
+  const handlePeelingChange = useCallback((newPeeling: Peeling) => {
+    setPeeling(newPeeling);
   }, []);
 
   const handleSizeChange = useCallback((updatedDimensions: Dimensions) => {
@@ -124,8 +145,11 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
 
       <div className="hidden flex-col space-y-6 md:flex">
         <ShapeSection shape={shape} onShapeChange={handleShapeChange} />
+        <MaterialSection material={material} onMaterialChange={handleMaterialChange} />
         <SizeSection shape={shape} dimensions={dimensions} onSizeChange={handleSizeChange} />
         <QuantitySection quantity={quantity} onQuantityChange={handleQuantityChange} />
+        <FormatSection format={format} onFormatChange={handleFormatChange} />
+        <PeelingSection peeling={peeling} onPeelingChange={handlePeelingChange} />
       </div>
     </div>
   );

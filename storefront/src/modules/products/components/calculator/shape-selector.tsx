@@ -20,7 +20,7 @@ export const shapes: ShapeOption[] = [
   { value: 'rectangle', label: 'Rectangle', icon: RectangleIcon },
   { value: 'square', label: 'Square', icon: Square },
   { value: 'circle', label: 'Circle', icon: Circle },
-  { value: 'diecut', label: 'Die Cut', icon: Hexagon }
+  { value: 'diecut', label: 'Irregular', icon: Hexagon }
 ];
 
 // Custom rectangle icon component
@@ -55,22 +55,22 @@ export default function ShapeSelector({ selectedShape, onShapeChange }: ShapeSel
               key={shape.value}
               onClick={() => onShapeChange(shape.value)}
               className={clsx(
-                "flex h-full w-full flex-col items-center justify-center gap-2 rounded-rounded border px-4 py-3 text-sm font-medium transition-colors",
+                "flex h-full w-full flex-col items-center justify-center gap-2 rounded-rounded border px-4 py-3 text-sm font-medium transition-all",
                 isSelected
-                  ? "border-ui-border-strong bg-ui-bg-field text-ui-fg-base shadow-elevation-card-hover"
-                  : "border-ui-border-base bg-ui-bg-subtle text-ui-fg-subtle hover:bg-ui-bg-base hover:text-ui-fg-base"
+                  ? "border-indigo-400 ring-2 ring-indigo-500/40 bg-neutral-950 text-white shadow-md"
+                  : "border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900"
               )}
             >
               <Icon
                 className={clsx(
                   "h-8 w-8",
-                  isSelected ? "text-ui-fg-base" : "text-ui-fg-subtle"
+                  isSelected ? "text-white" : "text-neutral-300"
                 )}
               />
               <span
                 className={clsx(
                   "text-xs",
-                  isSelected ? "text-ui-fg-base" : "text-ui-fg-subtle"
+                  isSelected ? "text-white" : "text-neutral-300"
                 )}
               >
                 {shape.label}

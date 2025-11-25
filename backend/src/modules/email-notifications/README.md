@@ -2,6 +2,11 @@
 
 This directory contains all the email templates used in the application using `react-email`.
 
+Currently available templates:
+- `order-placed` – customer-facing order confirmation
+- `order-admin-alert` – internal notification for new orders
+- `invite-user` – Medusa admin invite
+
 Run the following command to start the development server:
 
 ```bash

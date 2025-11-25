@@ -1,13 +1,14 @@
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { STICKER_PRICING_MODULE } from "../../../../modules/sticker-pricing"
 import StickerPricingService from "../../../../modules/sticker-pricing/service"
-import { StickerShape, StickerDimensions } from "../../../../modules/sticker-pricing/pricing-calculator"
+import { StickerShape, StickerDimensions, StickerMaterial } from "../../../../modules/sticker-pricing/pricing-calculator"
 
 type CalculateShapePricingRequest = {
   variantId?: string
   quantity: number
   shape: StickerShape
   dimensions?: StickerDimensions
+  material?: StickerMaterial
 }
 
 export async function POST(
@@ -15,7 +16,7 @@ export async function POST(
   res: MedusaResponse
 ) {
   try {
-    const { variantId, quantity, shape, dimensions } = req.body
+    const { variantId, quantity, shape, dimensions, material } = req.body
 
     if (!quantity || !shape) {
       return res.status(400).json({
@@ -37,7 +38,8 @@ export async function POST(
       quantity,
       shape,
       dimensions,
-      variantId
+      variantId,
+      material
     )
 
     return res.json({
@@ -49,4 +51,4 @@ export async function POST(
       error: error.message || "Failed to calculate shape-based sticker pricing"
     })
   }
-} 
+}

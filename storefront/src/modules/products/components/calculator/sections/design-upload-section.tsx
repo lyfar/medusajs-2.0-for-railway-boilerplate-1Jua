@@ -42,6 +42,8 @@ export default function DesignUploadSection({
       step={1}
       title="Upload your design"
       description="Drag and drop your artwork or browse files. We’ll preview how it fits your sticker."
+      infoTitle="Design files"
+      infoDescription="Upload high-res PNG, SVG, or PDF with a transparent background if possible. We’ll show a preview and suggest orientation before you confirm."
       contentClassName="mt-6"
     >
       <ImageDropZone

@@ -2,22 +2,35 @@
 
 import clsx from "clsx"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Monitor, Package, Ruler, Shapes, Smartphone } from "lucide-react"
+import { Monitor, Package, Ruler, Shapes, Smartphone, Layers, Scroll, ScanLine } from "lucide-react"
 
 import { Shape, shapes } from "./shape-selector"
+import { Material } from "./types"
+import { materials } from "./material-selector"
+import { Format } from "./types"
+import { formats } from "./format-selector"
+import { Peeling } from "./types"
+import { peelingOptions } from "./peeling-selector"
 import { Dimensions } from "./types"
 import { Orientation } from "./orientation"
 import { SIZE_PRESETS, SizePresetKey } from "./size-presets"
+import { InfoPopover } from "./sections/info-popover"
 
-type MobileControlKey = "shape" | "size" | "quantity" | null
+type MobileControlKey = "shape" | "size" | "quantity" | "material" | "format" | "peeling" | null
 
 interface MobileControlRailProps {
   shape: Shape
   dimensions: Dimensions
   quantity: number
+  material: Material
+  format: Format
+  peeling: Peeling
   onShapeChange: (shape: Shape) => void
   onSizeChange: (dimensions: Dimensions) => void
   onQuantityChange: (quantity: number) => void
+  onMaterialChange: (material: Material) => void
+  onFormatChange: (format: Format) => void
+  onPeelingChange: (peeling: Peeling) => void
   orientation?: Orientation
   onOrientationToggle?: () => void
   canAdjustOrientation?: boolean
@@ -28,9 +41,24 @@ const shapeLabelMap = shapes.reduce<Record<Shape, string>>((acc, option) => {
   return acc
 }, {} as Record<Shape, string>)
 
+const materialLabelMap = materials.reduce<Record<Material, string>>((acc, option) => {
+  acc[option.value] = option.label
+  return acc
+}, {} as Record<Material, string>)
+
+const formatLabelMap = formats.reduce<Record<Format, string>>((acc, option) => {
+  acc[option.value] = option.label
+  return acc
+}, {} as Record<Format, string>)
+
+const peelingLabelMap = peelingOptions.reduce<Record<Peeling, string>>((acc, option) => {
+  acc[option.value] = option.label
+  return acc
+}, {} as Record<Peeling, string>)
+
 const summaryButtonClass = (
   isActive: boolean,
-  accent: "emerald" | "indigo" | "amber"
+  accent: "emerald" | "indigo" | "amber" | "purple" | "cyan" | "rose"
 ) =>
   clsx(
     "flex h-12 min-w-[120px] items-center gap-2 rounded-2xl border px-3 text-left text-[11px] transition-all duration-200 backdrop-blur-sm",
@@ -45,6 +73,18 @@ const summaryButtonClass = (
     accent === "amber" &&
       (isActive
         ? "border-amber-300/70 bg-amber-400/20 text-white shadow-[0_0_15px_rgba(251,191,36,0.2)]"
+        : "border-white/10 bg-white/5 text-white/80"),
+    accent === "purple" &&
+      (isActive
+        ? "border-purple-400/70 bg-purple-500/20 text-white shadow-[0_0_15px_rgba(168,85,247,0.25)]"
+        : "border-white/10 bg-white/5 text-white/80"),
+    accent === "cyan" &&
+      (isActive
+        ? "border-cyan-400/70 bg-cyan-500/20 text-white shadow-[0_0_15px_rgba(34,211,238,0.25)]"
+        : "border-white/10 bg-white/5 text-white/80"),
+    accent === "rose" &&
+      (isActive
+        ? "border-rose-400/70 bg-rose-500/20 text-white shadow-[0_0_15px_rgba(244,63,94,0.25)]"
         : "border-white/10 bg-white/5 text-white/80")
   )
 
@@ -52,9 +92,15 @@ export default function MobileControlRail({
   shape,
   dimensions,
   quantity,
+  material,
+  format,
+  peeling,
   onShapeChange,
   onSizeChange,
   onQuantityChange,
+  onMaterialChange,
+  onFormatChange,
+  onPeelingChange,
   orientation,
   onOrientationToggle,
   canAdjustOrientation,
@@ -134,7 +180,7 @@ export default function MobileControlRail({
 
   const quantityOptions = [
     { value: 500, label: "Starter" },
-    { value: 1000, label: "Business" },
+    { value: 1000, label: "Expand" },
     { value: 2000, label: "Growth" },
     { value: 5000, label: "Volume" },
   ]
@@ -144,7 +190,7 @@ export default function MobileControlRail({
   }
 
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-[11px] [-ms-overflow-style:none] [scrollbar-width:none]">
+    <div className="flex items-center gap-1.5 overflow-x-auto overflow-y-visible py-1 text-[11px] [-ms-overflow-style:none] [scrollbar-width:none]">
       {/* Shape */}
       <div className="flex h-12 items-center gap-1.5 snap-start">
         <button
@@ -162,9 +208,17 @@ export default function MobileControlRail({
           </span>
           <div className="min-w-0">
             <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Shape</p>
-            <p className="text-[11px] font-semibold truncate">{shapeLabelMap[shape]}</p>
+            <p className="text-[11px] font-semibold truncate text-white">{shapeLabelMap[shape]}</p>
           </div>
         </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Shapes explained"
+            description="Pick circle/square for classics, rectangle for labels, or diecut to follow your artwork outline."
+            variant="dark"
+            size="sm"
+          />
+        </div>
         {activeControl === "shape" && (
           <div className="flex h-full items-center gap-1 px-1.5">
             {shapes.map((option) => {
@@ -184,6 +238,58 @@ export default function MobileControlRail({
                   aria-label={shapeLabelMap[option.value]}
                 >
                   <Icon className="h-4 w-4" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Material */}
+      <div className="flex h-12 items-center gap-1.5 snap-start">
+        <button
+          type="button"
+          className={summaryButtonClass(activeControl === "material", "purple")}
+          onClick={() => toggleControl("material")}
+        >
+          <span
+            className={clsx(
+              "flex h-8 w-8 items-center justify-center rounded-xl bg-purple-500/15 text-purple-200 transition",
+              activeControl === "material" && "bg-purple-500/30 text-white"
+            )}
+          >
+            <Layers className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Material</p>
+            <p className="text-[11px] font-semibold truncate max-w-[80px] text-white">{materialLabelMap[material]}</p>
+          </div>
+        </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Material options"
+            description="Vinyl is durable, eggshell is matte and textured, hologram/foil add shine, UV gloss gives extra pop."
+            variant="dark"
+            size="sm"
+          />
+        </div>
+        {activeControl === "material" && (
+          <div className="flex h-full items-center gap-1 px-1.5">
+            {materials.map((option) => {
+              const selected = option.value === material
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onMaterialChange(option.value)}
+                  className={clsx(
+                    "rounded-full border px-3 py-1.5 text-[10px] font-semibold transition whitespace-nowrap",
+                    selected
+                      ? "border-white/70 text-white"
+                      : "border-white/20 text-white/70"
+                  )}
+                >
+                  {option.label}
                 </button>
               )
             })}
@@ -236,9 +342,17 @@ export default function MobileControlRail({
           </span>
           <div className="min-w-0">
             <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Size</p>
-            <p className="text-[11px] font-semibold truncate">{sizeSummary}</p>
+            <p className="text-[11px] font-semibold truncate text-white">{sizeSummary}</p>
           </div>
         </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Sizing tips"
+            description="Set width/height (or diameter) between 1–50 cm. Keep proportions close to your design or choose a preset."
+            variant="dark"
+            size="sm"
+          />
+        </div>
         {activeControl === "size" && (
           <div className="flex h-full items-center gap-1 px-1.5">
             <div className="flex items-center gap-1">
@@ -349,9 +463,17 @@ export default function MobileControlRail({
           </span>
           <div className="min-w-0">
             <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Quantity</p>
-            <p className="text-[11px] font-semibold truncate">{quantity.toLocaleString()} pcs</p>
+            <p className="text-[11px] font-semibold truncate text-white">{quantity.toLocaleString()} pcs</p>
           </div>
         </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Quantity guidance"
+            description="Pick a preset for quick pricing or choose Custom for up to 20,000 pcs. Bigger runs lower unit cost."
+            variant="dark"
+            size="sm"
+          />
+        </div>
         {activeControl === "quantity" && (
           <div className="flex h-full items-center gap-1 px-1.5">
             <div className="flex items-center gap-1">
@@ -397,6 +519,110 @@ export default function MobileControlRail({
                 placeholder="Qty"
               />
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Format */}
+      <div className="flex h-12 items-center gap-1.5 snap-start">
+        <button
+          type="button"
+          className={summaryButtonClass(activeControl === "format", "cyan")}
+          onClick={() => toggleControl("format")}
+        >
+          <span
+            className={clsx(
+              "flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 text-cyan-200 transition",
+              activeControl === "format" && "bg-cyan-500/30 text-white"
+            )}
+          >
+            <Scroll className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Format</p>
+            <p className="text-[11px] font-semibold truncate text-white">{formatLabelMap[format]}</p>
+          </div>
+        </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Sheets vs rolls"
+            description="Sheets are easy for handouts; rolls keep labels organized for dispensers. Pricing is the same here."
+            variant="dark"
+            size="sm"
+          />
+        </div>
+        {activeControl === "format" && (
+          <div className="flex h-full items-center gap-1 px-1.5">
+            {formats.map((option) => {
+              const selected = option.value === format
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onFormatChange(option.value)}
+                  className={clsx(
+                    "rounded-full border px-3 py-1.5 text-[10px] font-semibold transition whitespace-nowrap",
+                    selected
+                      ? "border-white/70 text-white"
+                      : "border-white/20 text-white/70"
+                  )}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Peeling */}
+      <div className="flex h-12 items-center gap-1.5 snap-start">
+        <button
+          type="button"
+          className={summaryButtonClass(activeControl === "peeling", "rose")}
+          onClick={() => toggleControl("peeling")}
+        >
+          <span
+            className={clsx(
+              "flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/15 text-rose-200 transition",
+              activeControl === "peeling" && "bg-rose-500/30 text-white"
+            )}
+          >
+            <ScanLine className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-white/50">Peeling</p>
+            <p className="text-[11px] font-semibold truncate text-white">{peelingLabelMap[peeling]}</p>
+          </div>
+        </button>
+        <div className="hidden h-full items-center sm:flex">
+          <InfoPopover
+            title="Peeling styles"
+            description="Easy peel adds a crack-back for quick removal. Individual cut gives each sticker its own backing."
+            variant="dark"
+            size="sm"
+          />
+        </div>
+        {activeControl === "peeling" && (
+          <div className="flex h-full items-center gap-1 px-1.5">
+            {peelingOptions.map((option) => {
+              const selected = option.value === peeling
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onPeelingChange(option.value)}
+                  className={clsx(
+                    "rounded-full border px-3 py-1.5 text-[10px] font-semibold transition whitespace-nowrap",
+                    selected
+                      ? "border-white/70 text-white"
+                      : "border-white/20 text-white/70"
+                  )}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>

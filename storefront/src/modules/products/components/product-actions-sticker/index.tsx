@@ -11,8 +11,8 @@ import { addStickerToCart } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
 import { Shape } from "../calculator/shape-selector"
 import { useShapeStickerPricing } from "@lib/hooks/use-shape-sticker-pricing"
-import { DesignDraftState, createFileFromStoredAsset } from "../calculator/utils/design-storage"
-import { Dimensions } from "../calculator/types"
+import { DesignDraftState, createFileFromStoredAsset, getDesignFilesFromState } from "../calculator/utils/design-storage"
+import { Dimensions, Material, Format, Peeling } from "../calculator/types"
 import MobileControlRail from "../calculator/mobile-control-rail"
 import { getPresignedUploadUrl, uploadFileToPresignedUrl } from "@lib/data/uploads"
 import ImageDropZone, {
@@ -20,6 +20,9 @@ import ImageDropZone, {
   type AutoConfigureSuggestion,
 } from "../calculator/image-drop-zone"
 import ShapeSelector from "../calculator/shape-selector"
+import MaterialSelector from "../calculator/material-selector"
+import FormatSelector from "../calculator/format-selector"
+import PeelingSelector from "../calculator/peeling-selector"
 import SizeInput from "../calculator/size-input"
 import QuantitySelector from "../calculator/quantity-selector"
 import {
@@ -188,18 +191,25 @@ export default function ProductActionsSticker({
   const [patternSeed] = useState(() => Math.random())
   const [backgroundPattern, setBackgroundPattern] = useState<string | null>(null)
   const [shape, setShape] = useState<Shape>("rectangle")
+  const [material, setMaterial] = useState<Material>("vinyl")
+  const [format, setFormat] = useState<Format>("sheets")
+  const [peeling, setPeeling] = useState<Peeling>("easy_peel")
   const [dimensions, setDimensions] = useState<Dimensions>(defaultDimensions.rectangle)
   const [orientation, setOrientation] = useState<Orientation>(
     deriveOrientation("rectangle", defaultDimensions.rectangle)
   )
   const [quantity, setQuantity] = useState(500)
   const [designDraft, setDesignDraft] = useState<DesignDraftState | null>(null)
+  const [editorState, setEditorState] = useState<{ hasImage: boolean; hasUnsavedChanges: boolean }>({
+    hasImage: false,
+    hasUnsavedChanges: false,
+  })
   const [designError, setDesignError] = useState<string | null>(null)
   const countryCode = useParams().countryCode as string
   void _region
 
   const imageDropZoneRef = useRef<ImageDropZoneHandle>(null)
-  const { calculatePricing, lastPricing, isLoading: pricingLoading } = useShapeStickerPricing()
+  const { calculatePricing, lastPricing } = useShapeStickerPricing()
   const hasHydratedFromDraftRef = useRef(false)
   const skipDefaultDimensionsRef = useRef(false)
 
@@ -226,9 +236,9 @@ export default function ProductActionsSticker({
   useEffect(() => {
     if (!selectedVariant?.id) return
 
-    calculatePricing(quantity, shape, dimensions, selectedVariant.id)
+    calculatePricing(quantity, shape, dimensions, selectedVariant.id, material)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedVariant?.id, quantity, shape, dimensions])
+  }, [selectedVariant?.id, quantity, shape, dimensions, material])
 
   const inStock = useMemo(() => {
     if (selectedVariant && !selectedVariant.manage_inventory) {
@@ -250,50 +260,12 @@ export default function ProductActionsSticker({
     () => Boolean(designDraft?.original && designDraft?.edited),
     [designDraft]
   )
+  const designLockedIn = useMemo(
+    () => designReady && !editorState.hasUnsavedChanges,
+    [designReady, editorState.hasUnsavedChanges]
+  )
 
   const actionsRef = useRef<HTMLDivElement>(null)
-
-  const regularPrice = useMemo(() => {
-    if (!lastPricing) {
-      return null
-    }
-
-    const raw = lastPricing.basePrice * lastPricing.scalingFactor
-    return Math.round(raw * 100) / 100
-  }, [lastPricing])
-
-  const savings = useMemo(() => {
-    if (!lastPricing || !regularPrice) {
-      return 0
-    }
-
-    const diff = regularPrice - lastPricing.totalPrice
-    return diff > 0 ? Math.round(diff * 100) / 100 : 0
-  }, [lastPricing, regularPrice])
-
-  const discountPercent = useMemo(() => {
-    if (!regularPrice || savings <= 0) {
-      return 0
-    }
-
-    return Math.round((savings / regularPrice) * 100)
-  }, [regularPrice, savings])
-
-  const perStickerPrice = useMemo(() => {
-    if (!lastPricing || quantity <= 0) {
-      return null
-    }
-
-    return lastPricing.totalPrice / quantity
-  }, [lastPricing, quantity])
-
-  const regularPerSticker = useMemo(() => {
-    if (!regularPrice || quantity <= 0) {
-      return null
-    }
-
-    return regularPrice / quantity
-  }, [regularPrice, quantity])
 
   const canAdjustOrientation = supportsOrientation(shape, dimensions)
 
@@ -318,6 +290,8 @@ export default function ProductActionsSticker({
 
   const isSavingDesign = imageDropZoneRef.current?.isSavingDesign
 
+  // Standard CTA disabled state (logic for desktop and base constraints)
+  // Note: For mobile, we might allow clicking even if !designReady to show a toast
   const isCtaDisabled = useMemo(() => {
     if (!selectedVariant || !inStock || !!disabled || isAdding || isSavingDesign) {
       return true
@@ -325,20 +299,25 @@ export default function ProductActionsSticker({
     return false
   }, [selectedVariant, inStock, disabled, isAdding, isSavingDesign])
 
+  // Mobile click disabled state: same as above, but we DON'T disable for !designReady
+  // so we can capture the click and show a message
+  const isMobileCtaDisabled = useMemo(() => {
+    return isCtaDisabled // Base constraints
+  }, [isCtaDisabled])
+
   const primaryCtaLabel = useMemo(() => {
     if (!selectedVariant) return "Select variant"
     if (!inStock) return "Out of stock"
     if (isSavingDesign) return "Saving design..."
-    if (!designReady) return "Save your design"
     return "Add to cart"
-  }, [selectedVariant, inStock, isSavingDesign, designReady])
+  }, [selectedVariant, inStock, isSavingDesign])
 
   const desktopCtaLabel = useMemo(() => {
     if (lastPricing) {
-      return `${primaryCtaLabel} • $${lastPricing.totalPrice.toFixed(2)}`
+      return `Add to cart • $${lastPricing.totalPrice.toFixed(2)}`
     }
-    return primaryCtaLabel
-  }, [primaryCtaLabel, lastPricing])
+    return "Add to cart"
+  }, [lastPricing])
 
   const mobileCtaLabel = useMemo(() => {
     if (lastPricing) {
@@ -347,13 +326,26 @@ export default function ProductActionsSticker({
     return primaryCtaLabel
   }, [lastPricing, primaryCtaLabel])
 
+  const desktopInlineStatus = useMemo(() => {
+    if (designError) {
+      return { text: designError, className: "text-ui-fg-error" }
+    }
+    if (!designReady) {
+      return { text: "Save your design first", className: "text-amber-200" }
+    }
+    if (editorState.hasUnsavedChanges) {
+      return { text: "Save edits to unlock", className: "text-amber-200" }
+    }
+    return null
+  }, [designError, designReady, editorState.hasUnsavedChanges])
+
   const desktopCtaClasses = useMemo(
     () =>
       clsx(
-        "h-12 w-full flex-shrink-0 text-sm font-semibold sm:h-14 sm:text-base transition-colors",
-        !isCtaDisabled
-          ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white"
-          : ""
+        "h-12 px-6 min-w-[240px] max-w-[320px] w-auto flex-shrink-0 self-center rounded-rounded text-sm font-semibold sm:h-14 sm:text-base transition-colors",
+        isCtaDisabled
+          ? "bg-neutral-800 text-neutral-500 border border-neutral-700"
+          : "bg-emerald-500 text-white hover:bg-emerald-400 border border-emerald-500 shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
       ),
     [isCtaDisabled]
   )
@@ -362,11 +354,13 @@ export default function ProductActionsSticker({
     () =>
       clsx(
         "h-14 flex-1 text-base font-semibold transition-all rounded-2xl active:scale-98",
-        !isCtaDisabled
-          ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white shadow-lg"
+        !isMobileCtaDisabled
+          ? designLockedIn
+            ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white shadow-lg"
+            : "!bg-emerald-500/40 text-white/70 shadow-none ring-1 ring-emerald-400/40" // Dimmed state
           : ""
       ),
-    [isCtaDisabled]
+    [designLockedIn, isMobileCtaDisabled]
   )
 
   const uploadDesignAssets = useCallback(async (draft: DesignDraftState) => {
@@ -384,19 +378,12 @@ export default function ProductActionsSticker({
       return { fileKey: file_key, publicUrl }
     }
 
-    const originalFile = createFileFromStoredAsset(
-      draft.original,
-      draft.original.name || "design-original"
-    )
-    const editedFile = createFileFromStoredAsset(
-      draft.edited,
-      draft.edited.name || "design-edited"
-    )
+    const { original, edited } = await getDesignFilesFromState(draft)
 
-    const original = await uploadSingle(originalFile)
-    const edited = await uploadSingle(editedFile)
+    const originalUpload = await uploadSingle(original)
+    const editedUpload = await uploadSingle(edited)
 
-    return { original, edited }
+    return { original: originalUpload, edited: editedUpload }
   }, [])
 
   const handleDesignChange = useCallback(
@@ -425,6 +412,16 @@ export default function ProductActionsSticker({
       }
     },
     [shape]
+  )
+
+  const handleEditorStateChange = useCallback(
+    (state: { hasImage: boolean; hasUnsavedChanges: boolean }) => {
+      setEditorState(state)
+      if (!state.hasUnsavedChanges) {
+        setDesignError(null)
+      }
+    },
+    []
   )
 
   const handleAutoConfigure = useCallback(
@@ -475,8 +472,11 @@ export default function ProductActionsSticker({
   }, [canAdjustOrientation, orientation, handleOrientationChange])
 
   const handleButtonClick = async () => {
-    if (!designReady) {
-      await imageDropZoneRef.current?.saveDesign()
+    if (!designLockedIn) {
+      const message = designReady
+        ? "Save your latest edits before adding to cart."
+        : "Please save your design before adding to cart."
+      setDesignError(message)
       return
     }
 
@@ -495,7 +495,7 @@ export default function ProductActionsSticker({
     try {
       let pricingForCart = lastPricing
       if (!pricingForCart) {
-        pricingForCart = await calculatePricing(quantity, shape, dimensions, selectedVariant.id)
+        pricingForCart = await calculatePricing(quantity, shape, dimensions, selectedVariant.id, material)
         if (!pricingForCart) {
           setDesignError("Pricing is still being calculated. Please try again in a moment.")
           setIsAdding(false)
@@ -517,6 +517,9 @@ export default function ProductActionsSticker({
           design_storage_id: designDraft.id,
           shape,
           dimensions,
+          material,
+          format,
+          peeling,
           transformations: designDraft.lastTransformations ?? designDraft.transformations,
           pricing: {
             unitPrice: pricingForCart.unitPrice,
@@ -560,6 +563,7 @@ export default function ProductActionsSticker({
                 shape={shape}
                 dimensions={dimensions}
                 onDesignChange={handleDesignChange}
+                onEditStateChange={handleEditorStateChange}
                 disabled={!!disabled || isAdding}
                 compact={false}
                 onAutoConfigure={handleAutoConfigure}
@@ -570,12 +574,17 @@ export default function ProductActionsSticker({
           </div>
         </div>
 
-        <div className="flex w-full flex-col border-t border-ui-border-subtle bg-ui-bg-base lg:sticky lg:top-0 lg:h-full lg:w-1/3 lg:border-l lg:border-t-0 lg:border-ui-border-subtle">
-          <div className="flex-1 overflow-y-auto p-4 pt-4 pb-14 sm:p-6 sm:pt-8 sm:pb-24 lg:p-8">
+        <div className="flex w-full flex-col border-t border-ui-border-subtle bg-ui-bg-base lg:sticky lg:top-0 lg:h-full lg:w-1/3 lg:border-l lg:border-t-0 lg:border-ui-border-subtle lg:bg-transparent">
+          <div className="flex-1 overflow-y-auto p-4 pt-4 pb-36 sm:p-6 sm:pt-8 sm:pb-48 lg:p-8 lg:pb-12">
             <div className="space-y-8">
               <section id="shape" className="hidden space-y-4 scroll-mt-24 sm:block">
                 <h3 className="text-sm font-medium text-ui-fg-muted">Shape</h3>
                 <ShapeSelector selectedShape={shape} onShapeChange={setShape} />
+              </section>
+
+              <section id="material" className="hidden space-y-4 scroll-mt-24 sm:block">
+                <h3 className="text-sm font-medium text-ui-fg-muted">Material / effects</h3>
+                <MaterialSelector selectedMaterial={material} onMaterialChange={setMaterial} />
               </section>
 
               <section id="size" className="hidden space-y-4 scroll-mt-24 sm:block">
@@ -587,96 +596,23 @@ export default function ProductActionsSticker({
                 <h3 className="text-sm font-medium text-ui-fg-muted">Quantity</h3>
                 <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
               </section>
+
+              <section id="format" className="hidden space-y-4 scroll-mt-24 sm:block">
+                <h3 className="text-sm font-medium text-ui-fg-muted">Format</h3>
+                <FormatSelector selectedFormat={format} onFormatChange={setFormat} />
+              </section>
+
+              <section id="peeling" className="hidden space-y-4 scroll-mt-24 sm:block">
+                <h3 className="text-sm font-medium text-ui-fg-muted">Peeling option</h3>
+                <PeelingSelector selectedPeeling={peeling} onPeelingChange={setPeeling} />
+              </section>
             </div>
           </div>
 
-          <div className="lg:sticky lg:bottom-0 lg:left-0 lg:right-0 lg:border-t lg:border-ui-border-subtle lg:bg-ui-bg-base lg:p-0">
-            <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-ui-border-subtle bg-ui-bg-base px-4 py-3 shadow-[0_-6px_20px_rgba(0,0,0,0.25)] sm:sticky sm:bottom-0 sm:left-0 sm:right-0 sm:z-40 sm:py-4 lg:static lg:z-auto lg:px-0 lg:shadow-none">
+          <div className="lg:sticky lg:bottom-0 lg:left-0 lg:right-0 lg:border-0 lg:bg-transparent lg:p-0">
+            <div className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-3 sm:sticky sm:bottom-0 sm:left-0 sm:right-0 sm:z-40 sm:border-0 sm:bg-transparent sm:px-4 sm:py-4 sm:shadow-none lg:static lg:z-auto lg:px-0 lg:py-4 lg:shadow-none">
               {/* Desktop layout */}
-                <div className="hidden w-full flex-col gap-2 sm:flex">
-                <div className="flex flex-col gap-3 rounded-rounded border border-ui-border-subtle bg-ui-bg-subtle px-4 py-3 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6 sm:py-5">
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[11px] uppercase tracking-wide text-ui-fg-muted">
-                      {designReady ? "Total" : "Starting from"}
-                    </span>
-                    {designReady && lastPricing ? (
-                      <Popover className="relative">
-                        <Popover.Button className="flex items-center gap-2 rounded-rounded border border-ui-border-subtle bg-ui-bg-base px-3 py-1 text-[11px] font-medium text-ui-fg-muted transition hover:border-ui-border-strong hover:text-ui-fg-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-border-strong">
-                          View breakdown
-                        </Popover.Button>
-                        <Transition
-                          as={Fragment}
-                          enter="transition ease-out duration-100"
-                          enterFrom="opacity-0 translate-y-1"
-                          enterTo="opacity-100 translate-y-0"
-                          leave="transition ease-in duration-75"
-                          leaveFrom="opacity-100 translate-y-0"
-                          leaveTo="opacity-0 translate-y-1"
-                        >
-                          <Popover.Panel className="absolute left-0 z-50 mt-2 w-64 rounded-rounded border border-ui-border-subtle bg-ui-bg-base p-4 text-xs shadow-lg sm:left-auto sm:right-0">
-                            {pricingLoading ? (
-                              <div className="space-y-2">
-                                <div className="h-3 w-20 animate-pulse rounded bg-ui-bg-subtle" />
-                                <div className="h-3 w-24 animate-pulse rounded bg-ui-bg-subtle" />
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span>Setup cost</span>
-                                  <span className="font-medium text-ui-fg-base">${lastPricing?.basePrice.toFixed(2)}</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span>Production area</span>
-                                  <span className="font-medium text-ui-fg-base">{lastPricing?.area.toFixed(2)} cm²</span>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span>Quantity</span>
-                                  <span className="font-medium text-ui-fg-base">{quantity.toLocaleString()}</span>
-                                </div>
-                                {perStickerPrice && (
-                                  <div className="flex items-center justify-between">
-                                    <span>Per sticker</span>
-                                    <span className="font-medium text-ui-fg-base">${perStickerPrice.toFixed(3)}</span>
-                                  </div>
-                                )}
-                                <div className="rounded-rounded border border-ui-border-subtle bg-ui-bg-subtle px-3 py-2 text-[11px] text-ui-fg-muted">
-                                  Pricing combines setup, material usage, and quantity efficiencies. Discounts apply when we can batch production.
-                                </div>
-                              </div>
-                            )}
-                          </Popover.Panel>
-                        </Transition>
-                      </Popover>
-                    ) : (
-                      <span className="rounded-rounded bg-ui-bg-base/70 px-3 py-2 text-xs text-ui-fg-muted">
-                        Drop or upload your design to unlock the full price breakdown.
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {designReady && lastPricing && regularPrice && savings > 0 && discountPercent >= 5 && (
-                      <span className="text-sm font-medium text-ui-fg-muted line-through">
-                        ${regularPrice.toFixed(2)}
-                      </span>
-                    )}
-                    <span className="text-2xl font-semibold text-ui-fg-base">
-                      {lastPricing ? `$${lastPricing.totalPrice.toFixed(2)}` : "$99.00"}
-                    </span>
-                    {designReady && lastPricing && savings > 0 && discountPercent >= 5 && (
-                      <span className="rounded-rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200">
-                        Save ${savings.toFixed(2)}{discountPercent > 0 ? ` (${discountPercent}%)` : ""}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {designError && (
-                  <div className="flex items-center gap-1.5 text-xs text-ui-fg-error sm:text-sm">
-                    <div className="h-1 w-1 flex-shrink-0 rounded-full bg-ui-fg-error"></div>
-                    <span className="line-clamp-1">{designError}</span>
-                  </div>
-                )}
-
+              <div className="hidden w-full flex-col items-center gap-2 sm:flex">
                 <Button
                   onClick={handleButtonClick}
                   disabled={isCtaDisabled}
@@ -685,39 +621,42 @@ export default function ProductActionsSticker({
                   isLoading={isAdding || isSavingDesign}
                   data-testid="add-product-button"
                 >
-                  {desktopCtaLabel}
+                  <div className="flex w-full flex-col items-center text-center leading-tight">
+                    <span className="text-sm font-semibold sm:text-base">{desktopCtaLabel}</span>
+                    {desktopInlineStatus && (
+                      <span className={clsx("text-[11px] font-medium", desktopInlineStatus.className)}>
+                        {desktopInlineStatus.text}
+                      </span>
+                    )}
+                  </div>
                 </Button>
               </div>
 
               {/* Mobile compact summary */}
               <div className="relative flex flex-col gap-3 sm:hidden">
-                <div className="rounded-3xl border border-ui-border-subtle bg-ui-bg-base/95 p-4 shadow-[0_15px_45px_rgba(0,0,0,0.45)] backdrop-blur">
+                <div className="rounded-3xl px-4">
                   <MobileControlRail
                     shape={shape}
                     dimensions={dimensions}
                     quantity={quantity}
+                    material={material}
+                    format={format}
+                    peeling={peeling}
                     onShapeChange={setShape}
                     onSizeChange={handleDimensionsChange}
                     onQuantityChange={setQuantity}
+                    onMaterialChange={setMaterial}
+                    onFormatChange={setFormat}
+                    onPeelingChange={setPeeling}
                     orientation={orientation}
                     onOrientationToggle={canAdjustOrientation ? handleOrientationToggle : undefined}
                     canAdjustOrientation={canAdjustOrientation}
                   />
                   <div className="mt-3 flex flex-col gap-2">
-                    {lastPricing ? (
-                      <div className="flex items-center justify-between rounded-2xl border border-white/10 px-3 py-2 text-sm text-white">
-                        <span className="text-white/70">Total</span>
-                        <span className="font-semibold">${lastPricing.totalPrice.toFixed(2)}</span>
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-white/10 px-3 py-2 text-xs text-white/60">
-                        Upload and save your design to preview pricing.
-                      </div>
-                    )}
                     <div className="flex items-center">
                     <Button
                       onClick={handleButtonClick}
-                      disabled={isCtaDisabled}
+                      disabled={isMobileCtaDisabled}
                       variant="primary"
                       className={mobileCtaClasses}
                       isLoading={isAdding || isSavingDesign}
@@ -727,13 +666,13 @@ export default function ProductActionsSticker({
                     </Button>
                     </div>
                   </div>
-                  {!designReady && !isSavingDesign && designDraft?.original && (
-                    <p className="mt-3 text-center text-[11px] font-medium text-amber-200">
-                      Save your latest tweaks to unlock checkout.
+                  {!designLockedIn && (
+                    <p className="text-center text-[11px] font-medium text-amber-200">
+                      Save your design inside the canvas to enable checkout.
                     </p>
                   )}
                   {!designDraft?.original && (
-                    <p className="mt-3 text-center text-[11px] font-medium text-indigo-200">
+                    <p className="text-center text-[11px] font-medium text-indigo-200">
                       Upload artwork above to activate all controls.
                     </p>
                   )}

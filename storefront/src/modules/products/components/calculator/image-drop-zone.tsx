@@ -31,7 +31,7 @@ import { useImageUpload, useTransparencyCheck } from "./hooks"
 import { getContainerStyles } from "./utils/shapeStyles"
 import { DesignZoomTool } from "./tools"
 import { Dimensions } from "./types"
-import { DesignDraftState, StoredUploadPreviewKind, fileToDataUrl } from "./utils/design-storage"
+import { DesignDraftState, StoredUploadPreviewKind, generatePreviewDataUrl } from "./utils/design-storage"
 import { SIZE_PRESETS, SizeDimensions, SizePresetKey } from "./size-presets"
 import { supportsOrientation, deriveOrientation, type Orientation } from "./orientation"
 
@@ -39,6 +39,7 @@ interface ImageDropZoneProps {
   shape: Shape
   dimensions: Dimensions
   onDesignChange?: (state: DesignDraftState | null) => void
+  onEditStateChange?: (state: { hasImage: boolean; hasUnsavedChanges: boolean }) => void
   disabled?: boolean
   compact?: boolean
   onAutoConfigure?: (suggestion: AutoConfigureSuggestion) => void
@@ -435,6 +436,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
   shape,
   dimensions,
   onDesignChange,
+  onEditStateChange,
   disabled,
   compact = false,
   onAutoConfigure,
@@ -456,6 +458,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
   >(null)
   const [isSavingDesign, setIsSavingDesign] = useState(false)
   const [isImageSelected, setIsImageSelected] = useState(false)
+  const [imageMetaVersion, setImageMetaVersion] = useState(0)
 
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -507,6 +510,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
         setScale(1)
         setRotation(0)
         setPosition({ x: 0, y: 0 })
+        setImageMetaVersion((v) => v + 1)
       }
       setIsImageSelected(false)
       return
@@ -587,6 +591,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       imageMetaRef.current = null
       setResolutionWarning(null)
       setIsImageDark(false)
+      setImageMetaVersion((v) => v + 1)
       return
     }
 
@@ -596,6 +601,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       const meta = await analyzeImage(imageData, dimensions, shape, setResolutionWarning, setIsImageDark)
       if (!cancelled) {
         imageMetaRef.current = meta
+        setImageMetaVersion((v) => v + 1)
       }
     }
 
@@ -646,14 +652,54 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
   const canAdjustOrientation = orientationSupported && typeof onOrientationChange === "function"
   const activeOrientation = orientation ?? derivedOrientation
   const hasZoomControls = Boolean(imageData && stickerAreaSize.width > 0 && stickerAreaSize.height > 0)
-  const shouldShowControlPanel = hasZoomControls || canAdjustOrientation
+  const lastSavedTransform = useMemo(
+    () => designState?.lastTransformations ?? designState?.transformations ?? null,
+    [designState?.lastTransformations, designState?.transformations]
+  )
+  const hasUnsavedChanges = useMemo(() => {
+    if (!imageData) return false
+    if (designState?.original && !designState?.edited) {
+      return true
+    }
+    if (!lastSavedTransform) {
+      return true
+    }
+    const dx = (lastSavedTransform.position?.x ?? 0) - position.x
+    const dy = (lastSavedTransform.position?.y ?? 0) - position.y
+    const positionDelta = Math.hypot(dx, dy)
+    return (
+      Math.abs(lastSavedTransform.scale - scale) > 0.005 ||
+      Math.abs(lastSavedTransform.rotation - rotation) > 0.5 ||
+      positionDelta > 0.5
+    )
+  }, [
+    designState?.edited,
+    designState?.original,
+    imageData,
+    lastSavedTransform,
+    position.x,
+    position.y,
+    rotation,
+    scale,
+  ])
+  useEffect(() => {
+    onEditStateChange?.({
+      hasImage: Boolean(imageData),
+      hasUnsavedChanges,
+    })
+  }, [hasUnsavedChanges, imageData, onEditStateChange])
 
   const renderSize = useMemo(() => {
-    if (!imageData || !imageMetaRef.current || !stickerAreaSize.width || !stickerAreaSize.height) {
+    if (!imageData || !stickerAreaSize.width || !stickerAreaSize.height) {
       return { width: 0, height: 0 }
     }
 
-    const { width: naturalWidth, height: naturalHeight } = imageMetaRef.current
+    const naturalWidth = imageMetaRef.current?.width ?? stickerAreaSize.width
+    const naturalHeight = imageMetaRef.current?.height ?? stickerAreaSize.height
+    if (!naturalWidth || !naturalHeight) {
+      return { width: 0, height: 0 }
+    }
+
     // Fit image within sticker area while maintaining aspect ratio
     const scaleToFit = Math.min(stickerAreaSize.width / naturalWidth, stickerAreaSize.height / naturalHeight)
     baseScaleRef.current = scaleToFit
@@ -662,7 +708,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       width: naturalWidth * scaleToFit,
       height: naturalHeight * scaleToFit,
     }
-  }, [imageData, stickerAreaSize.width, stickerAreaSize.height])
+  }, [imageData, stickerAreaSize.width, stickerAreaSize.height, imageMetaVersion])
 
   const isImageOverflowing = useMemo(() => {
     if (!stickerAreaSize.width || !stickerAreaSize.height || !renderSize.width || !renderSize.height) {
@@ -1083,41 +1129,41 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     endDrag()
   }, [endDrag])
 
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent) => {
-      const active = activeTransformRef.current
-      if (!active || event.pointerId !== active.pointerId) {
-        return
-      }
-
-      const center = getWrapperCenter()
-      if (!center) {
-        return
-      }
-
-      event.preventDefault()
-
-      if (active.type === "scale") {
-        const distance = Math.hypot(event.clientX - center.x, event.clientY - center.y)
-        if (!distance || !active.initialDistance) {
-          return
-        }
-        const ratio = distance / active.initialDistance
-        const nextScale = clamp(active.initialScale * ratio, 0.5, 3)
-        setScale(nextScale)
-      } else if (active.type === "rotate") {
-        const currentAngle = Math.atan2(event.clientY - center.y, event.clientX - center.x)
-        const delta = currentAngle - active.initialAngle
-        let next = active.initialRotation + (delta * 180) / Math.PI
-        if (next > 180) {
-          next -= 360
-        } else if (next <= -180) {
-          next += 360
-        }
-        setRotation(Math.max(-180, Math.min(180, next)))
-      }
+  const handlePointerMove = useCallback((event: PointerEvent) => {
+    const active = activeTransformRef.current
+    if (!active || event.pointerId !== active.pointerId) {
+      return
     }
 
+    const center = getWrapperCenter()
+    if (!center) {
+      return
+    }
+
+    event.preventDefault()
+
+    if (active.type === "scale") {
+      const distance = Math.hypot(event.clientX - center.x, event.clientY - center.y)
+      if (!distance || !active.initialDistance) {
+        return
+      }
+      const ratio = distance / active.initialDistance
+      const nextScale = clamp(active.initialScale * ratio, 0.5, 3)
+      setScale(nextScale)
+    } else if (active.type === "rotate") {
+      const currentAngle = Math.atan2(event.clientY - center.y, event.clientX - center.x)
+      const delta = currentAngle - active.initialAngle
+      let next = active.initialRotation + (delta * 180) / Math.PI
+      if (next > 180) {
+        next -= 360
+      } else if (next <= -180) {
+        next += 360
+      }
+      setRotation(Math.max(-180, Math.min(180, next)))
+    }
+  }, [getWrapperCenter]) // Add dependency
+
+  useEffect(() => {
     const handlePointerUp = (event: PointerEvent) => {
       const active = activeTransformRef.current
       if (!active || event.pointerId !== active.pointerId) {
@@ -1140,7 +1186,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       document.removeEventListener("pointerup", handlePointerUp)
       document.removeEventListener("pointercancel", handlePointerUp)
     }
-  }, [getWrapperCenter])
+  }, [handlePointerMove]) // Add dependency to effect
 
   const onFileDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -1161,7 +1207,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
         setFileType(file.type)
 
         if (mimeType.startsWith("image/") || mimeType === "image/svg+xml") {
-          previewDataUrl = await fileToDataUrl(file)
+          previewDataUrl = await generatePreviewDataUrl(file)
           nextPreviewKind = "bitmap"
           setEditorError(null)
         } else if (mimeType === "application/pdf") {
@@ -1189,6 +1235,7 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
           setEditorError("Unsupported file type. Please upload PNG, JPG, SVG, AI, or PDF.")
         }
 
+        // Update state immediately to show image
         if (previewDataUrl) {
           setImageData(previewDataUrl)
           setPreviewKind(nextPreviewKind)
@@ -1470,6 +1517,18 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                 ? `⌀ ${dimensions.diameter}cm`
                 : `${dimensions.width}cm × ${dimensions.height}cm`}
             </div>
+            {imageData && (
+              <span
+                className={clsx(
+                  "rounded-full px-3 py-1 text-xs font-semibold shadow-sm",
+                  hasUnsavedChanges
+                    ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/60"
+                    : "bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/60"
+                )}
+              >
+                {hasUnsavedChanges ? "Unsaved changes" : "Saved"}
+              </span>
+            )}
             {imageData && !isTouchDevice && (
               <button
                 onClick={() => setShowKeyboardHints(!showKeyboardHints)}
@@ -1530,12 +1589,34 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                       : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
                   )}
                 >
-                  <Redo2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Redo</span>
-                </button>
-              </>
+                <Redo2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Redo</span>
+              </button>
+            </>
             )}
-            
+            <button
+              type="button"
+              onClick={handleSaveEditedDesign}
+              disabled={!imageData || isSavingDesign || (!hasUnsavedChanges && !designState?.edited)}
+              className={clsx(
+                "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
+                !imageData
+                  ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
+                  : hasUnsavedChanges
+                    ? "bg-emerald-600/90 text-white hover:bg-emerald-500 active:scale-95"
+                    : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
+              )}
+              title={imageData ? (hasUnsavedChanges ? "Save your latest edits" : "Saved") : "Upload an image first"}
+            >
+              <Check className={clsx("h-4 w-4", hasUnsavedChanges ? "text-white" : "text-emerald-300")} />
+              <span className="hidden sm:inline">
+                {isSavingDesign ? "Saving..." : hasUnsavedChanges ? "Save design" : "Saved"}
+              </span>
+              <span className="sm:hidden">
+                {isSavingDesign ? "Saving..." : hasUnsavedChanges ? "Save" : "Saved"}
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={handleReset}
@@ -1584,33 +1665,21 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
       </div>
 
       {/* Main Canvas Area - Flex Grow */}
-      <div className="relative flex flex-1 gap-3 pt-4 md:gap-4">
-        {/* Zoom/Rotation + Orientation Controls - Left Side (desktop) */}
-        {shouldShowControlPanel && (
-          <div className="hidden w-24 flex-shrink-0 md:flex">
-            <div className="sticky top-4 flex h-fit w-full flex-col gap-4 rounded-2xl border border-neutral-700 bg-neutral-800/80 p-3 shadow-xl backdrop-blur-sm">
-              {hasZoomControls && (
+      <div className="relative flex flex-1 pt-4 md:gap-4">
+        {/* Canvas Container */}
+        <div className="relative flex w-full flex-1 flex-col items-center justify-center p-4">
+          {hasZoomControls && (
+            <div className="pointer-events-none absolute left-4 top-4 z-10 hidden md:block">
+              <div className="pointer-events-auto flex h-fit w-full flex-col gap-4 rounded-2xl border border-neutral-700 bg-neutral-800/90 p-2 shadow-xl backdrop-blur-md">
                 <DesignZoomTool
                   scale={scale}
                   rotation={rotation}
                   onScaleChange={handleScaleChange}
                   onRotationChange={handleRotationChange}
                 />
-              )}
-              {canAdjustOrientation && (
-                <OrientationToggle
-                  current={activeOrientation}
-                  onChange={onOrientationChange}
-                  layout="vertical"
-                />
-              )}
+              </div>
             </div>
-          </div>
-        )}
-
-
-        {/* Canvas Container */}
-        <div className="relative flex w-full flex-1 flex-col items-center justify-center p-4">
+          )}
           <div
             {...getRootProps()}
             ref={containerRef}
@@ -1795,19 +1864,55 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
                 )}
               </div>
             )}
+
+          {/* Mobile Save Button Overlay */}
+          {imageData && isTouchDevice && (
+            <div className="pointer-events-none absolute inset-x-4 bottom-8 z-50 flex justify-center">
+              <div className="pointer-events-auto flex flex-col items-center gap-3">
+                {canAdjustOrientation && (
+                  <div className="rounded-full border border-neutral-700 bg-neutral-900/80 p-1.5 shadow-lg backdrop-blur-sm">
+                    <OrientationToggle
+                      current={activeOrientation}
+                      onChange={onOrientationChange}
+                      layout="horizontal"
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-2 rounded-full border border-indigo-500/50 bg-indigo-600 px-6 py-2 text-sm font-bold text-white shadow-lg transition-all active:scale-95 disabled:opacity-50">
+                  <button
+                    onClick={handleSaveEditedDesign}
+                    disabled={isSavingDesign || !hasUnsavedChanges}
+                    className="flex items-center gap-2"
+                  >
+                    {isSavingDesign ? "Saving..." : hasUnsavedChanges ? "Save design" : "Saved"}
+                  </button>
+                  {!hasUnsavedChanges && <Check className="h-4 w-4 text-white/80" />}
+                </div>
+                {hasUnsavedChanges && (
+                  <p className="text-center text-[12px] font-medium text-white/80">
+                    Save to lock changes before checkout.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {canAdjustOrientation && (
-          <div className="mt-6 flex items-center justify-center gap-2 md:hidden">
-            <span className="text-xs font-medium text-neutral-400">Orientation:</span>
-            <OrientationToggle
-              current={activeOrientation}
-              onChange={onOrientationChange}
-              layout="horizontal"
-            />
-          </div>
-        )}
+        
       </div>
+
+      {/* Orientation Controls - Desktop: Moved below the canvas */}
+      {canAdjustOrientation && (
+          <div className="z-20 hidden md:flex items-center justify-center pb-2">
+             <div className="rounded-full bg-neutral-900/40 p-1.5 backdrop-blur-sm border border-neutral-700/50 shadow-sm">
+                <OrientationToggle
+                  current={activeOrientation}
+                  onChange={onOrientationChange}
+                  layout="horizontal"
+                />
+             </div>
+          </div>
+      )}
 
     </div>
 
