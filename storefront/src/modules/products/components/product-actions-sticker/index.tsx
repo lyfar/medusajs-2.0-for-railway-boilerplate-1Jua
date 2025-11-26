@@ -644,7 +644,7 @@ export default function ProductActionsSticker({
           </div>
 
           {/* Active Step Content */}
-          <div className="relative bg-zinc-950/50 min-h-[140px] flex flex-col justify-center transition-[height] duration-200 ease-in-out">
+          <div className="relative bg-zinc-950/50 min-h-[110px] flex flex-col justify-center transition-[height] duration-200 ease-in-out">
             <div className="w-full px-4">
                {activeStep === 'shape' && (
                  <ShapeSelector selectedShape={shape} onShapeChange={setShape} layout="horizontal" />

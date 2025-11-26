@@ -177,7 +177,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange, layout = 'd
               onClick={() => handleSizeSelect(size)}
               className={clsx(
                 'group flex items-center rounded-rounded border text-left transition-all',
-                isHorizontal ? "snap-start shrink-0 p-2 gap-2 min-w-[140px]" : "px-3.5 py-3 gap-3 text-sm h-full",
+                isHorizontal ? "snap-start shrink-0 p-2 gap-2 min-w-[100px]" : "px-3.5 py-3 gap-3 text-sm h-full",
                 isSelected
                   ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white'
                   : 'border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900'
@@ -185,8 +185,8 @@ export default function SizeInput({ shape, dimensions, onSizeChange, layout = 'd
             >
               <div
                 className={clsx(
-                  'flex shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase transition',
-                  isHorizontal ? "h-8 w-8 text-[10px]" : "h-11 w-11",
+                  'flex shrink-0 items-center justify-center rounded-md border font-bold uppercase transition',
+                  isHorizontal ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-xs",
                   isSelected
                     ? 'border-indigo-300 text-white bg-indigo-500/10 shadow-sm ring-1 ring-indigo-300/60'
                     : 'border-neutral-600 text-neutral-200 bg-neutral-900 ring-1 ring-neutral-800'
@@ -206,6 +206,76 @@ export default function SizeInput({ shape, dimensions, onSizeChange, layout = 'd
       </div>
 
       {selectedSize === 'Custom' && (
+        isHorizontal ? (
+          <div className="rounded-lg border border-white/10 bg-neutral-900/50 backdrop-blur-sm p-3">
+             {shape === 'circle' ? (
+                <div className="flex items-center gap-2">
+                   <label className="text-[10px] text-neutral-400 font-medium">Diameter</label>
+                   <div className="flex-1 relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="50"
+                        step="0.1"
+                        value={customDimensions.diameter || ''}
+                        onChange={(event) => handleCustomDimensionChange('diameter', event.target.value)}
+                        className={clsx(
+                          "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none",
+                          dimensionErrors.diameter && "border-red-500"
+                        )}
+                        placeholder="1-50"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-600">cm</span>
+                   </div>
+                </div>
+             ) : (
+                <div className="flex items-center gap-2">
+                   <div className="flex-1 flex items-center gap-2">
+                      <span className="text-[10px] text-neutral-400 font-medium w-3">W</span>
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          step="0.1"
+                          value={customDimensions.width || ''}
+                          onChange={(event) => handleCustomDimensionChange('width', event.target.value)}
+                          className={clsx(
+                            "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none",
+                            dimensionErrors.width && "border-red-500"
+                          )}
+                          placeholder="Width"
+                        />
+                      </div>
+                   </div>
+                   <span className="text-neutral-600 text-xs">×</span>
+                   <div className="flex-1 flex items-center gap-2">
+                      <span className="text-[10px] text-neutral-400 font-medium w-3">H</span>
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          step="0.1"
+                          value={customDimensions.height || ''}
+                          onChange={(event) => handleCustomDimensionChange('height', event.target.value)}
+                          className={clsx(
+                            "w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none",
+                            dimensionErrors.height && "border-red-500"
+                          )}
+                          placeholder="Height"
+                        />
+                      </div>
+                   </div>
+                </div>
+             )}
+             {(dimensionErrors.width || dimensionErrors.height || dimensionErrors.diameter || atMaximumSize) && (
+                <p className={clsx("text-[10px] mt-2 text-center", (dimensionErrors.width || dimensionErrors.height || dimensionErrors.diameter) ? "text-red-400" : "text-neutral-500")}>
+                  {dimensionErrors.width || dimensionErrors.height || dimensionErrors.diameter || sizeGuidanceText}
+                </p>
+             )}
+          </div>
+        ) : (
         <div className="space-y-4 rounded-rounded border border-ui-border-base bg-ui-bg-subtle p-4">
           {shape === 'circle' ? (
             <div className="space-y-1.5">
@@ -283,6 +353,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange, layout = 'd
             {sizeGuidanceText}
           </p>
         </div>
+        )
       )}
     </div>
   )

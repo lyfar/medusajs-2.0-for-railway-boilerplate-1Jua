@@ -60,8 +60,10 @@ export default function ShapeSelector({ selectedShape, onShapeChange, layout = '
               key={shape.value}
               onClick={() => onShapeChange(shape.value)}
               className={clsx(
-                "flex flex-col items-center justify-center gap-2 rounded-rounded border transition-all text-sm font-medium",
-                isHorizontal ? "snap-start shrink-0 w-[88px] h-[88px] p-2" : "h-full w-full px-4 py-3",
+                "flex items-center justify-center gap-2 rounded-rounded border transition-all text-sm font-medium",
+                isHorizontal 
+                  ? "flex-row snap-start shrink-0 px-3 py-2 min-w-[110px]" 
+                  : "flex-col h-full w-full px-4 py-3",
                 isSelected
                   ? "border-indigo-400 ring-2 ring-indigo-500/40 bg-neutral-950 text-white shadow-md"
                   : "border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900"
