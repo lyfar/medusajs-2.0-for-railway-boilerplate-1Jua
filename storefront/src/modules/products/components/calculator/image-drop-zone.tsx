@@ -564,8 +564,8 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
   return (
     <Fragment>
       <div className="flex h-full flex-col">
-        <div className="relative z-10 space-y-3">
-          <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+        <div className="relative z-10 space-y-3 p-4 pb-0 sm:p-0">
+          <div className="flex flex-row items-center justify-between gap-2 sm:flex-row sm:justify-between sm:gap-3">
             <InfoBadges
               shape={shape}
               dimensions={dimensions}
@@ -592,7 +592,9 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
             />
           </div>
 
-          <FormatSupportInfo />
+          <div className="hidden sm:block">
+            <FormatSupportInfo />
+          </div>
 
           {resolutionWarning && imageData && <ResolutionWarning warning={resolutionWarning} />}
 

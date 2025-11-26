@@ -596,7 +596,7 @@ export default function ProductActionsSticker({
             backgroundPosition: backgroundPattern ? "center" : undefined,
           }}
         >
-          <div className="absolute inset-0 flex flex-col p-4 pb-32 sm:p-6 sm:pb-20 lg:static lg:h-full lg:p-8 lg:pb-12 justify-center">
+          <div className="absolute inset-0 flex flex-col p-4 sm:p-6 sm:pb-20 lg:static lg:h-full lg:p-8 lg:pb-12 justify-center">
             <div className="flex-1 min-h-0 flex flex-col justify-center lg:h-full lg:w-full">
               <ImageDropZone
                 ref={imageDropZoneRef}

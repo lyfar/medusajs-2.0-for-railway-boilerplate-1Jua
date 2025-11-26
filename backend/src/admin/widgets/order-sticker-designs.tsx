@@ -1,6 +1,21 @@
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
 import { Container, Heading, Table, Button, Text } from "@medusajs/ui"
-import { ArrowDownTray, Eye } from "@medusajs/icons"
+import React from "react"
+
+const EyeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+)
+
+const ArrowDownTrayIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 16v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" />
+    <polyline points="8 12 12 16 16 12" />
+    <line x1="12" y1="2" x2="12" y2="16" />
+  </svg>
+)
 
 // Professional sticker design widget with Medusa admin styling
 const OrderStickerDesigns = ({ data }) => {
@@ -123,12 +138,12 @@ const OrderStickerDesigns = ({ data }) => {
                     <div className="flex items-center gap-2">
                       <a href={designUrl} target="_blank" rel="noopener noreferrer">
                         <Button variant="secondary" size="small">
-                          <Eye className="text-ui-fg-subtle" />
+                          <EyeIcon />
                         </Button>
                       </a>
                       <a href={designUrl} download={`sticker-${item.id}.png`}>
                         <Button variant="secondary" size="small">
-                          <ArrowDownTray className="text-ui-fg-subtle" />
+                          <ArrowDownTrayIcon />
                           Print File
                         </Button>
                       </a>

@@ -6,7 +6,7 @@ import { OrderDTO, OrderAddressDTO } from '@medusajs/framework/types'
 export const ORDER_PLACED = 'order-placed'
 
 interface OrderPlacedPreviewProps {
-  order: OrderDTO & { display_id: string; summary: { raw_current_order_total: { value: number } } }
+  order: Partial<OrderDTO> & { display_id: string; summary: { raw_current_order_total: { value: number } } }
   shippingAddress: OrderAddressDTO
 }
 

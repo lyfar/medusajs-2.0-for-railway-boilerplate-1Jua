@@ -39,7 +39,7 @@ export function CanvasToolbar({
         onClick={onUploadClick}
         disabled={!canBrowse}
         className={clsx(
-          "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
+          "flex items-center gap-2 rounded-full px-3 py-2 sm:px-4 text-sm font-medium shadow-md transition-all duration-200 min-h-[40px] sm:min-h-[44px]",
           !canBrowse
             ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
             : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
@@ -58,7 +58,7 @@ export function CanvasToolbar({
             disabled={!canUndo}
             title="Undo"
             className={clsx(
-              "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
+              "flex items-center gap-2 rounded-full px-3 py-2 sm:px-4 text-sm font-medium shadow-md transition-all duration-200 min-h-[40px] sm:min-h-[44px]",
               !canUndo
                 ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
                 : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
@@ -73,7 +73,7 @@ export function CanvasToolbar({
             disabled={!canRedo}
             title="Redo"
             className={clsx(
-              "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
+              "flex items-center gap-2 rounded-full px-3 py-2 sm:px-4 text-sm font-medium shadow-md transition-all duration-200 min-h-[40px] sm:min-h-[44px]",
               !canRedo
                 ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
                 : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
@@ -91,7 +91,7 @@ export function CanvasToolbar({
         disabled={!imageData}
         title="Reset"
         className={clsx(
-          "flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-md transition-all duration-200 min-h-[44px]",
+          "flex items-center gap-2 rounded-full px-3 py-2 sm:px-4 text-sm font-medium shadow-md transition-all duration-200 min-h-[40px] sm:min-h-[44px]",
           !imageData
             ? "cursor-not-allowed bg-neutral-800/40 text-neutral-500"
             : "bg-neutral-800/80 text-neutral-200 hover:bg-neutral-700/90 active:scale-95"
