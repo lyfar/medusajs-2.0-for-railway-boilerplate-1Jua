@@ -6,6 +6,7 @@ import { Format } from './types';
 interface FormatSelectorProps {
   selectedFormat: Format;
   onFormatChange: (format: Format) => void;
+  layout?: 'default' | 'horizontal';
 }
 
 type FormatOption = {
@@ -44,9 +45,13 @@ export const formats: FormatOption[] = [
   { value: 'rolls', label: 'Rolls', description: '(Same price no changes)' },
 ];
 
-export default function FormatSelector({ selectedFormat, onFormatChange }: FormatSelectorProps) {
+export default function FormatSelector({ selectedFormat, onFormatChange, layout = 'default' }: FormatSelectorProps) {
+  const isHorizontal = layout === 'horizontal';
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2">
+    <div className={clsx(
+      isHorizontal ? "flex overflow-x-auto snap-x snap-mandatory gap-3 pb-1 no-scrollbar" : "grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-2"
+    )}>
       {formats.map((option) => {
         const isSelected = selectedFormat === option.value;
         return (
@@ -54,7 +59,8 @@ export default function FormatSelector({ selectedFormat, onFormatChange }: Forma
             key={option.value}
             onClick={() => onFormatChange(option.value)}
             className={clsx(
-              "group flex items-center gap-3 rounded-rounded border px-3.5 py-3 text-left text-sm transition-all h-full",
+              "group flex items-center rounded-rounded border text-left transition-all",
+              isHorizontal ? "snap-start shrink-0 p-2 gap-2 min-w-[160px]" : "h-full px-3.5 py-3 gap-3 text-sm",
               isSelected
                 ? "border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white"
                 : "border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900"
@@ -62,7 +68,8 @@ export default function FormatSelector({ selectedFormat, onFormatChange }: Forma
           >
             <div
               className={clsx(
-                "relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-neutral-900 shadow-sm ring-1 ring-white/10",
+                "relative flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-white/10 bg-neutral-900 shadow-sm ring-1 ring-white/10",
+                isHorizontal ? "h-8 w-8" : "h-12 w-12",
                 formatVisuals[option.value].bg,
                 isSelected && formatVisuals[option.value].ring
               )}
@@ -71,9 +78,15 @@ export default function FormatSelector({ selectedFormat, onFormatChange }: Forma
             </div>
 
             <div className="flex flex-col gap-0.5">
-              <span className={clsx("font-semibold text-xs", isSelected ? "text-white" : "text-neutral-100")}>{option.label}</span>
-              {option.description && (
-                <span className={clsx("text-[11px] leading-tight", isSelected ? "text-neutral-200" : "text-neutral-400")}>
+              <span className={clsx(
+                "font-semibold",
+                isHorizontal ? "text-[10px] leading-tight" : "text-xs",
+                isSelected ? "text-white" : "text-neutral-100"
+              )}>
+                {option.label}
+              </span>
+              {!isHorizontal && option.description && (
+                <span className={clsx("text-[10px] leading-tight", isSelected ? "text-neutral-200" : "text-neutral-400")}>
                   {option.description}
                 </span>
               )}

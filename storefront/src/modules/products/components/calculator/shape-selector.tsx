@@ -8,6 +8,7 @@ export type Shape = 'rectangle' | 'square' | 'circle' | 'diecut';
 interface ShapeSelectorProps {
   selectedShape: Shape;
   onShapeChange: (shape: Shape) => void;
+  layout?: 'default' | 'horizontal';
 }
 
 type ShapeOption = {
@@ -43,10 +44,14 @@ function RectangleIcon({ className }: { className?: string }) {
   );
 }
 
-export default function ShapeSelector({ selectedShape, onShapeChange }: ShapeSelectorProps) {
+export default function ShapeSelector({ selectedShape, onShapeChange, layout = 'default' }: ShapeSelectorProps) {
+  const isHorizontal = layout === 'horizontal';
+
   return (
     <div className="space-y-4">
-      <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={clsx(
+        isHorizontal ? "flex overflow-x-auto snap-x snap-mandatory gap-3 pb-1 no-scrollbar" : "grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+      )}>
         {shapes.map((shape) => {
           const Icon = shape.icon;
           const isSelected = selectedShape === shape.value;
@@ -55,7 +60,8 @@ export default function ShapeSelector({ selectedShape, onShapeChange }: ShapeSel
               key={shape.value}
               onClick={() => onShapeChange(shape.value)}
               className={clsx(
-                "flex h-full w-full flex-col items-center justify-center gap-2 rounded-rounded border px-4 py-3 text-sm font-medium transition-all",
+                "flex flex-col items-center justify-center gap-2 rounded-rounded border transition-all text-sm font-medium",
+                isHorizontal ? "snap-start shrink-0 w-[88px] h-[88px] p-2" : "h-full w-full px-4 py-3",
                 isSelected
                   ? "border-indigo-400 ring-2 ring-indigo-500/40 bg-neutral-950 text-white shadow-md"
                   : "border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900"

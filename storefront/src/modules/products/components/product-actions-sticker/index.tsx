@@ -596,7 +596,7 @@ export default function ProductActionsSticker({
             backgroundPosition: backgroundPattern ? "center" : undefined,
           }}
         >
-          <div className="absolute inset-0 flex flex-col p-4 sm:p-6 sm:pb-20 lg:static lg:h-full lg:p-8 lg:pb-12 justify-center">
+          <div className="absolute inset-0 flex flex-col sm:p-6 sm:pb-20 lg:static lg:h-full lg:p-8 lg:pb-12 justify-center">
             <div className="flex-1 min-h-0 flex flex-col justify-center lg:h-full lg:w-full">
               <ImageDropZone
                 ref={imageDropZoneRef}
@@ -617,7 +617,7 @@ export default function ProductActionsSticker({
         {/* Mobile Controls Area - Fixed Height Bottom Sheet */}
         <div className="flex flex-col bg-[#09090b] border-t border-white/10 lg:hidden z-50 pb-[env(safe-area-inset-bottom)] shrink-0">
           {/* Tab Bar */}
-          <div className="flex items-center w-full border-b border-white/5">
+          <div className="flex items-center w-full border-b border-white/5 overflow-x-auto no-scrollbar">
             {STEPS.map((step) => {
               const Icon = step.icon
               const isActive = activeStep === step.id
@@ -627,12 +627,12 @@ export default function ProductActionsSticker({
                   key={step.id}
                   onClick={() => setActiveStep(step.id)}
                   className={clsx(
-                    "flex-1 flex flex-col items-center justify-center gap-1 py-3 relative min-w-0",
+                    "flex-1 flex flex-col items-center justify-center gap-1 py-3 relative min-w-[70px]",
                     isActive ? "text-white" : "text-zinc-500"
                   )}
                 >
                   <Icon className={clsx("w-5 h-5", isActive ? "text-white" : "text-current")} />
-                  <span className="text-[10px] font-medium capitalize truncate w-full px-1">{step.label}</span>
+                  <span className="text-[10px] font-medium capitalize truncate w-full px-1 text-center">{step.label}</span>
                   {isActive && (
                     <div className="absolute bottom-0 w-full h-0.5 bg-white/20">
                       <div className="mx-auto w-8 h-full bg-white rounded-full" />
@@ -644,44 +644,27 @@ export default function ProductActionsSticker({
           </div>
 
           {/* Active Step Content */}
-          <div className="h-[220px] relative bg-zinc-950/50 overflow-hidden">
-            {STEPS.map((step) => (
-              <Transition
-                key={step.id}
-                show={activeStep === step.id}
-                enter="transition ease-out duration-300 transform"
-                enterFrom="opacity-0 translate-y-4 scale-95"
-                enterTo="opacity-100 translate-y-0 scale-100"
-                leave="transition ease-in duration-200 transform"
-                leaveFrom="opacity-100 translate-y-0 scale-100"
-                leaveTo="opacity-0 -translate-y-4 scale-95"
-                className="absolute inset-0 p-4 overflow-y-auto w-full h-full bg-[#09090b]"
-              >
-                <div className="space-y-3 min-h-full pb-4">
-                  <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                    Select {step.label}
-                  </h3>
-                  {step.id === 'shape' && (
-                    <ShapeSelector selectedShape={shape} onShapeChange={setShape} />
-                  )}
-                  {step.id === 'material' && (
-                    <MaterialSelector selectedMaterial={material} onMaterialChange={setMaterial} />
-                  )}
-                  {step.id === 'size' && (
-                    <SizeInput shape={shape} dimensions={dimensions} onSizeChange={handleDimensionsChange} />
-                  )}
-                  {step.id === 'quantity' && (
-                    <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
-                  )}
-                  {step.id === 'format' && (
-                    <FormatSelector selectedFormat={format} onFormatChange={setFormat} />
-                  )}
-                  {step.id === 'peeling' && (
-                    <PeelingSelector selectedPeeling={peeling} onPeelingChange={setPeeling} />
-                  )}
-                </div>
-              </Transition>
-            ))}
+          <div className="relative bg-zinc-950/50">
+            <div className="p-4 w-full overflow-hidden">
+               {activeStep === 'shape' && (
+                 <ShapeSelector selectedShape={shape} onShapeChange={setShape} layout="horizontal" />
+               )}
+               {activeStep === 'material' && (
+                 <MaterialSelector selectedMaterial={material} onMaterialChange={setMaterial} layout="horizontal" />
+               )}
+               {activeStep === 'size' && (
+                 <SizeInput shape={shape} dimensions={dimensions} onSizeChange={handleDimensionsChange} layout="horizontal" />
+               )}
+               {activeStep === 'quantity' && (
+                 <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} layout="horizontal" />
+               )}
+               {activeStep === 'format' && (
+                 <FormatSelector selectedFormat={format} onFormatChange={setFormat} layout="horizontal" />
+               )}
+               {activeStep === 'peeling' && (
+                 <PeelingSelector selectedPeeling={peeling} onPeelingChange={setPeeling} layout="horizontal" />
+               )}
+            </div>
           </div>
 
           {/* Mobile Action Bar */}

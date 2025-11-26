@@ -260,11 +260,11 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     hasSeededHistoryRef,
   })
 
-  const dropzoneStyle = useMemo<CSSProperties>(() => {
+    const dropzoneStyle = useMemo<CSSProperties>(() => {
     return {
       width: "100%",
       height: "100%",
-      minHeight: compact ? 220 : 320,
+      minHeight: compact ? 220 : 150,
       margin: "0 auto",
       position: "relative",
       overflow: "hidden",
@@ -601,8 +601,8 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
           <ErrorBanner message={uploadError ?? editorError} />
         </div>
 
-        <div className="relative flex flex-1 pt-4 md:gap-4">
-          <div className="relative flex w-full flex-1 flex-col items-center justify-center p-4">
+        <div className="relative flex flex-1 pt-2 md:pt-4 md:gap-4">
+          <div className="relative flex w-full flex-1 flex-col items-center justify-center md:p-4">
             <ZoomOverlay
               visible={hasZoomControls}
               scale={scale}

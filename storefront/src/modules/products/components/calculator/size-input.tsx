@@ -31,7 +31,7 @@ const sizeVisuals: Record<SizeOption, { label: string }> = {
   Custom: { label: 'C' }
 }
 
-export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInputProps) {
+export default function SizeInput({ shape, dimensions, onSizeChange, layout = 'default' }: SizeInputProps & { layout?: 'default' | 'horizontal' }) {
   const [selectedSize, setSelectedSize] = useState<SizeOption>('L');
   const [customDimensions, setCustomDimensions] = useState<Dimensions>({
     width: 0,
@@ -39,6 +39,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
     diameter: 0
   });
   const [dimensionErrors, setDimensionErrors] = useState<{ width?: string; height?: string; diameter?: string }>({})
+  const isHorizontal = layout === 'horizontal';
 
   // Helper function to check if current dimensions match a predefined size
   const findMatchingSize = (dims: Dimensions): SizeOption | null => {
@@ -164,7 +165,9 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
 
   return (
     <div className="space-y-4">
-      <div className="grid auto-rows-fr grid-cols-3 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={clsx(
+        isHorizontal ? "flex overflow-x-auto snap-x snap-mandatory gap-3 pb-1 no-scrollbar" : "grid auto-rows-fr grid-cols-3 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+      )}>
         {(['S', 'M', 'L', 'XL', 'Custom'] as SizeOption[]).map((size) => {
           const isSelected = selectedSize === size
 
@@ -173,7 +176,8 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
               key={size}
               onClick={() => handleSizeSelect(size)}
               className={clsx(
-                'group flex items-center gap-3 rounded-rounded border px-3.5 py-3 text-left text-sm transition-all h-full',
+                'group flex items-center rounded-rounded border text-left transition-all',
+                isHorizontal ? "snap-start shrink-0 p-2 gap-2 min-w-[140px]" : "px-3.5 py-3 gap-3 text-sm h-full",
                 isSelected
                   ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white'
                   : 'border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900'
@@ -181,7 +185,8 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
             >
               <div
                 className={clsx(
-                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase transition',
+                  'flex shrink-0 items-center justify-center rounded-md border text-xs font-bold uppercase transition',
+                  isHorizontal ? "h-8 w-8 text-[10px]" : "h-11 w-11",
                   isSelected
                     ? 'border-indigo-300 text-white bg-indigo-500/10 shadow-sm ring-1 ring-indigo-300/60'
                     : 'border-neutral-600 text-neutral-200 bg-neutral-900 ring-1 ring-neutral-800'
@@ -190,8 +195,8 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
                 {sizeVisuals[size].label}
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className={clsx('font-semibold text-xs', isSelected ? 'text-white' : 'text-neutral-100')}>{size}</span>
-                <span className={clsx('text-[11px] leading-tight', isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
+                <span className={clsx('font-semibold', isHorizontal ? "text-[10px] leading-tight" : "text-xs", isSelected ? 'text-white' : 'text-neutral-100')}>{size}</span>
+                <span className={clsx('leading-tight', isHorizontal ? "text-[10px]" : "text-[11px]", isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
                   {getDimensionDisplay(size)}
                 </span>
               </div>

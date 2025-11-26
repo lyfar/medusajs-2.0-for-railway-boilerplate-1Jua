@@ -35,9 +35,10 @@ const determineOption = (quantity: number): QuantityOption => {
   return match ?? 'Custom'
 }
 
-export default function QuantitySelector({ quantity, onQuantityChange }: QuantitySelectorProps) {
+export default function QuantitySelector({ quantity, onQuantityChange, layout = 'default' }: QuantitySelectorProps & { layout?: 'default' | 'horizontal' }) {
   const [selectedQuantity, setSelectedQuantity] = useState<QuantityOption>(() => determineOption(quantity))
   const [sliderQuantity, setSliderQuantity] = useState<number>(quantity || 500)
+  const isHorizontal = layout === 'horizontal';
 
   useEffect(() => {
     const option = determineOption(quantity)
@@ -86,7 +87,9 @@ export default function QuantitySelector({ quantity, onQuantityChange }: Quantit
 
   return (
     <div className="space-y-4">
-      <div className="grid auto-rows-fr grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className={clsx(
+        isHorizontal ? "flex overflow-x-auto snap-x snap-mandatory gap-3 pb-1 no-scrollbar" : "grid auto-rows-fr grid-cols-2 gap-2.5 sm:grid-cols-2 xl:grid-cols-3"
+      )}>
         {(['500', '1000', '2000', '5000', 'Custom'] as QuantityOption[]).map((option) => {
           const isSelected = selectedQuantity === option
 
@@ -95,7 +98,8 @@ export default function QuantitySelector({ quantity, onQuantityChange }: Quantit
               key={option}
               onClick={() => handleQuantitySelect(option)}
               className={clsx(
-                'group flex items-center gap-3 rounded-rounded border px-3.5 py-3 text-left text-sm transition-all min-h-[60px] sm:min-h-[68px]',
+                'group flex items-center rounded-rounded border text-left transition-all',
+                isHorizontal ? "snap-start shrink-0 p-2 gap-2 min-w-[140px]" : "px-3.5 py-3 gap-3 text-sm min-h-[60px] sm:min-h-[68px]",
                 isSelected
                   ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-md bg-neutral-950 text-white'
                   : 'border-neutral-700 bg-neutral-950 text-neutral-200 hover:border-neutral-500 hover:bg-neutral-900 active:bg-neutral-900'
@@ -103,7 +107,8 @@ export default function QuantitySelector({ quantity, onQuantityChange }: Quantit
             >
               <div
                 className={clsx(
-                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-md border text-[11px] font-bold uppercase transition',
+                  'flex shrink-0 items-center justify-center rounded-md border text-[11px] font-bold uppercase transition',
+                  isHorizontal ? "h-8 w-8 text-[9px]" : "h-11 w-11",
                   isSelected
                     ? 'border-indigo-300 text-white bg-indigo-500/10 shadow-sm ring-1 ring-indigo-300/60'
                     : 'border-neutral-600 text-neutral-200 bg-neutral-900 ring-1 ring-neutral-800'
@@ -112,10 +117,10 @@ export default function QuantitySelector({ quantity, onQuantityChange }: Quantit
                 {quantityVisuals[option].label}
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className={clsx('font-semibold text-xs leading-tight', isSelected ? 'text-white' : 'text-neutral-100')}>
+                <span className={clsx('font-semibold leading-tight', isHorizontal ? "text-[10px]" : "text-xs", isSelected ? 'text-white' : 'text-neutral-100')}>
                   {getQuantityLabel(option)}
                 </span>
-                <span className={clsx('text-[11px] leading-tight', isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
+                <span className={clsx('leading-tight', isHorizontal ? "text-[10px]" : "text-[11px]", isSelected ? 'text-neutral-200' : 'text-neutral-500')}>
                   {getQuantityDisplay(option)}
                 </span>
               </div>
