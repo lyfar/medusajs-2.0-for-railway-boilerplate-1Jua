@@ -16,6 +16,7 @@ import {
   deleteCustomerAddress,
   updateCustomerAddress,
 } from "@lib/data/customer"
+import { Building, MapPin, Phone, Trash2, Pencil } from "lucide-react"
 
 type EditAddressProps = {
   region: HttpTypes.StoreRegion
@@ -66,57 +67,76 @@ const EditAddress: React.FC<EditAddressProps> = ({
     <>
       <div
         className={clx(
-          "border rounded-rounded p-5 min-h-[220px] h-full w-full flex flex-col justify-between transition-colors",
+          "group relative bg-zinc-900/30 border border-zinc-800/50 rounded-xl p-6 flex flex-col justify-between transition-all duration-300 hover:bg-zinc-900/50 hover:border-zinc-700/50",
           {
-            "border-gray-900": isActive,
+            "border-indigo-500/50 bg-indigo-500/5": isActive,
           }
         )}
         data-testid="address-container"
       >
-        <div className="flex flex-col">
-          <Heading
-            className="text-left text-base-semi"
-            data-testid="address-name"
-          >
-            {address.first_name} {address.last_name}
-          </Heading>
-          {address.company && (
-            <Text
-              className="txt-compact-small text-ui-fg-base"
-              data-testid="address-company"
-            >
-              {address.company}
-            </Text>
-          )}
-          <Text className="flex flex-col text-left text-base-regular mt-2">
-            <span data-testid="address-address">
-              {address.address_1}
-              {address.address_2 && <span>, {address.address_2}</span>}
-            </span>
-            <span data-testid="address-postal-city">
-              {address.postal_code}, {address.city}
-            </span>
-            <span data-testid="address-province-country">
-              {address.province && `${address.province}, `}
-              {address.country_code?.toUpperCase()}
-            </span>
-          </Text>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <Heading
+                className="text-base font-medium text-white flex items-center gap-2"
+                data-testid="address-name"
+              >
+                {address.first_name} {address.last_name}
+                {isActive && (
+                  <span className="text-[10px] bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded-full uppercase tracking-wider">Default</span>
+                )}
+              </Heading>
+              {address.company && (
+                <div className="flex items-center gap-1.5 text-sm text-zinc-400">
+                  <Building size={14} />
+                  <span data-testid="address-company">{address.company}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2 text-sm text-zinc-400 bg-black/20 p-3 rounded-lg border border-white/5">
+            <div className="flex gap-2">
+              <MapPin size={16} className="shrink-0 text-zinc-500 mt-0.5" />
+              <div className="flex flex-col">
+                <span data-testid="address-address">
+                  {address.address_1}
+                  {address.address_2 && <span>, {address.address_2}</span>}
+                </span>
+                <span data-testid="address-postal-city">
+                  {address.city}, {address.postal_code}
+                </span>
+                <span data-testid="address-province-country">
+                  {address.province && `${address.province}, `}
+                  {address.country_code?.toUpperCase()}
+                </span>
+              </div>
+            </div>
+            {address.phone && (
+              <div className="flex gap-2 pt-2 border-t border-white/5 mt-2">
+                <Phone size={16} className="shrink-0 text-zinc-500" />
+                <span>{address.phone}</span>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-x-4">
+
+        <div className="flex items-center gap-3 mt-6 pt-4 border-t border-zinc-800/50">
           <button
-            className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
+            className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors"
             onClick={open}
             data-testid="address-edit-button"
           >
-            <Edit />
+            <Pencil size={16} />
             Edit
           </button>
+          <div className="h-4 w-px bg-zinc-800" />
           <button
-            className="text-small-regular text-ui-fg-base flex items-center gap-x-2"
+            className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-red-400 transition-colors"
             onClick={removeAddress}
             data-testid="address-delete-button"
           >
-            {removing ? <Spinner /> : <Trash />}
+            {removing ? <Spinner className="w-4 h-4" /> : <Trash2 size={16} />}
             Remove
           </button>
         </div>

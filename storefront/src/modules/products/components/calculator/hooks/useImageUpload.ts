@@ -38,6 +38,8 @@ interface SaveEditedPayload {
     rotation: number
     position: { x: number; y: number }
   }
+  shape?: Shape
+  dimensions?: Dimensions
 }
 
 interface UseImageUploadProps {
@@ -196,7 +198,7 @@ export function useImageUpload({
   )
 
   const saveEditedAsset = useCallback(
-    async ({ blob, fileName, mimeType, transformations }: SaveEditedPayload) => {
+    async ({ blob, fileName, mimeType, transformations, shape, dimensions }: SaveEditedPayload) => {
       if (disabled) {
         return
       }
@@ -231,6 +233,8 @@ export function useImageUpload({
             previewDataUrl: prev.previewDataUrl,
             transformations: transformations,
             lastTransformations: transformations,
+            shape: shape ?? prev.shape,
+            dimensions: (dimensions ? { ...dimensions } : prev.dimensions) as StoredDimensions | undefined,
             updatedAt: Date.now(),
           }
         })

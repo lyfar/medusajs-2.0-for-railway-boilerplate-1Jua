@@ -1,4 +1,3 @@
-import repeat from "@lib/util/repeat"
 import { HttpTypes } from "@medusajs/types"
 import { Heading } from "@medusajs/ui"
 
@@ -13,32 +12,28 @@ type ItemsTemplateProps = {
 const ItemsTemplate = ({ items, cart }: ItemsTemplateProps) => {
   const currencyCode = cart?.currency_code || "EUR"
   return (
-    <div className="bg-gray-800 dark:bg-black rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-        <Heading className="text-lg-semi text-white">Cart</Heading>
+    <div className="w-full">
+      <div className="flex items-center justify-between pb-6 border-b border-white/5 mb-6">
+        <Heading className="text-2xl font-medium text-white tracking-tight">Cart ({items?.length || 0})</Heading>
       </div>
       
-      {/* Modern List Layout */}
-      <div className="flex flex-col divide-y divide-gray-700">
+      <div className="flex flex-col gap-4">
         {items && cart
           ? items
               .sort((a, b) => {
                 return (a.created_at ?? 0) > (b.created_at ?? 0) ? -1 : 1
               })
               .map((item, index) => (
-                <div key={item.id} className={index === 0 ? "pt-2" : ""}>
-                  <Item 
-                    item={item} 
-                    currencyCode={currencyCode} 
-                    type="full" 
-                    isLast={index === items.length - 1}
-                  />
-                </div>
+                <Item 
+                  key={item.id}
+                  item={item} 
+                  currencyCode={currencyCode} 
+                  type="full" 
+                  isLast={index === items.length - 1}
+                />
               ))
           : Array.from(Array(3).keys()).map((i) => (
-              <div key={i} className={i === 0 ? "pt-2" : ""}>
-                <SkeletonLineItem />
-              </div>
+              <SkeletonLineItem key={i} />
             ))}
       </div>
     </div>

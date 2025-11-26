@@ -67,6 +67,12 @@
 - `@lib/util/sticker-utils.ts`: mirrors backend quantity rules (variant guard, MOQ, price formatting) to keep client validation in sync.
 - Cart helpers (`@lib/data/cart.ts`, `addStickerToCart`) inject metadata (`file_key`, `design_url`, pricing totals) so backend workflows can persist the custom price + artwork reference.
 
+### Sticker design editor (storefront `calculator/` folder)
+- Container: `image-drop-zone.tsx` orchestrates all editor state (upload, transforms, bleed guides, save/export) and renders the canvas + toolbars.
+- Presentational components: `components/canvas-stage.tsx` (dropzone + selection overlay), `selection-overlay.tsx`, `zoom-overlay.tsx`, `canvas-toolbar.tsx`, `canvas-empty-state.tsx`, `mobile-save-overlay.tsx`, `orientation-toggle.tsx`, `keyboard-shortcuts-modal.tsx`, `info-badges.tsx`, `format-support-info.tsx`, `resolution-warning.tsx`, `error-banner.tsx`, `save-success-overlay.tsx`, `sticker-flow-canvas.tsx` (background wrapper).
+- Hooks: `use-image-transforms` (drag/scale/rotate interactions), `use-transform-history` (undo/redo), `use-image-meta` (dpi/darkness analysis), `use-sticker-canvas` (container sizing, shape styles, orientation), `use-bleed-guides` (bleed/safe-zone styling), `use-file-drop` (onDrop, preview generation, auto-configure), `use-design-hydration` (load/clear saved designs), `use-keyboard-shortcuts` (editor hotkeys).
+- Utilities: `utils/file-previews.ts` (PDF/vector preview), `file-types.ts` (accepted mime/extension map), `image-analysis.ts` + `image-loading.ts`, `math.ts` (clamp), `export-design.ts` (offscreen export + save).
+
 ### Layout & Components
 - All new UI sticks to `@medusajs/ui` primitives (see usage across `src/modules/...` via `rg "@medusajs/ui"`), ensuring consistency with Medusa’s admin/site design language.
 - Remote image domains configured in `storefront/next.config.js` include R2/public buckets and Medusa demo assets—update when infra domains change.

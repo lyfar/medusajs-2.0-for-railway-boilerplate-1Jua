@@ -46,7 +46,7 @@ function RectangleIcon({ className }: { className?: string }) {
 export default function ShapeSelector({ selectedShape, onShapeChange }: ShapeSelectorProps) {
   return (
     <div className="space-y-4">
-      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {shapes.map((shape) => {
           const Icon = shape.icon;
           const isSelected = selectedShape === shape.value;

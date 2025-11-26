@@ -1,18 +1,33 @@
 "use client"
 
 import { HttpTypes } from "@medusajs/types"
-import { Table, Text } from "@medusajs/ui"
+import { Text, clx } from "@medusajs/ui"
 import { useMemo, useState } from "react"
+import type { CSSProperties } from "react"
 
-import LineItemOptions from "@modules/common/components/line-item-options"
 import LineItemPrice from "@modules/common/components/line-item-price"
 import LineItemUnitPrice from "@modules/common/components/line-item-unit-price"
 import Thumbnail from "@modules/products/components/thumbnail"
 import Lightbox from "@modules/common/components/lightbox"
 import { isStickerLineItem } from "@lib/util/sticker-utils"
+import { Scaling, Layers, Scissors, Scan, Hash } from "lucide-react"
+import Image from "next/image"
 
 type ItemProps = {
   item: HttpTypes.StoreCartLineItem | HttpTypes.StoreOrderLineItem
+}
+
+const SpecItem = ({ icon: Icon, label, value }: { icon: any; label: string; value: string | null | number }) => {
+  if (!value) return null
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1.5 text-zinc-500">
+        <Icon className="w-3.5 h-3.5" />
+        <span className="text-[10px] uppercase tracking-wider font-medium">{label}</span>
+      </div>
+      <span className="text-sm text-zinc-200 font-medium truncate">{value}</span>
+    </div>
+  )
 }
 
 const Item = ({ item }: ItemProps) => {
@@ -21,12 +36,9 @@ const Item = ({ item }: ItemProps) => {
   
   // Fix malformed Cloudflare R2 URLs
   const normalizeCloudflareUrl = (url: string) => {
-    // Check if URL has the malformed pattern: r2.devpk_
     if (url.includes('r2.devpk_')) {
-      // Extract the filename from the end of the URL
       const filename = url.split('/').pop()
-      // Replace the malformed part with correct structure
-      const baseUrl = url.split('r2.devpk_')[0] + 'r2.dev/'
+      const baseUrl = 'https://stickers.lyfar.com/'
       return baseUrl + filename
     }
     return url
@@ -36,7 +48,9 @@ const Item = ({ item }: ItemProps) => {
   const stickerDimensions = item.metadata?.dimensions as { width?: number; height?: number; diameter?: number } | undefined
   const stickerShape = typeof item.metadata?.shape === "string" ? (item.metadata.shape as string) : null
   const stickerMaterial = typeof item.metadata?.material === "string" ? (item.metadata.material as string) : null
-  const orientation = typeof item.metadata?.orientation === "string" ? (item.metadata.orientation as string) : null
+  const stickerFormat = typeof item.metadata?.format === "string" ? (item.metadata.format as string) : null
+  const stickerPeeling = typeof item.metadata?.peeling === "string" ? (item.metadata.peeling as string) : null
+  const stickerOrientation = typeof item.metadata?.orientation === "string" ? (item.metadata.orientation as string) : null
   const isSticker = isStickerLineItem(item as any)
 
   const formatSizeDisplay = () => {
@@ -50,55 +64,13 @@ const Item = ({ item }: ItemProps) => {
     return null
   }
 
-  const formattedShape = useMemo(() => {
-    if (!stickerShape) return null
-    return stickerShape
+  const formatToken = (value: string | null) => {
+    if (!value) return null
+    return value
       .split(/[\s_-]+/)
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(" ")
-  }, [stickerShape])
-
-  const formattedMaterial = useMemo(() => {
-    if (!stickerMaterial) return null
-    return stickerMaterial
-      .split(/[\s_-]+/)
-      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-      .join(" ")
-  }, [stickerMaterial])
-
-  const formattedOrientation = useMemo(() => {
-    if (!orientation) return null
-    return orientation.charAt(0).toUpperCase() + orientation.slice(1)
-  }, [orientation])
-
-  const stickerFacts = useMemo(() => {
-    if (!isSticker) return []
-    const details: { label: string; value: string }[] = []
-    if (formattedShape) {
-      details.push({ label: "Shape", value: formattedShape })
-    }
-    const size = formatSizeDisplay()
-    if (size) {
-      details.push({ label: "Size", value: size })
-    }
-    if (formattedMaterial) {
-      details.push({ label: "Material", value: formattedMaterial })
-    }
-    if (formattedOrientation) {
-      details.push({ label: "Orientation", value: formattedOrientation })
-    }
-    details.push({ label: "Quantity", value: item.quantity.toLocaleString() })
-    return details
-  }, [
-    isSticker,
-    formattedShape,
-    formattedMaterial,
-    formattedOrientation,
-    item.quantity,
-    stickerDimensions?.width,
-    stickerDimensions?.height,
-    stickerDimensions?.diameter,
-  ])
+  }
   
   const stickerAspectRatio = useMemo(() => {
     if (!stickerDimensions) return 1
@@ -110,102 +82,136 @@ const Item = ({ item }: ItemProps) => {
       return 1
     }
     return Math.min(Math.max(ratio, 0.35), 3.5)
-  }, [
-    stickerDimensions?.width,
-    stickerDimensions?.height,
-    stickerDimensions?.diameter,
-  ])
+  }, [stickerDimensions])
 
   const stickerPreviewRadius = useMemo(() => {
     if (!stickerShape) return "0.75rem"
     const normalized = stickerShape.toLowerCase()
     if (normalized === "circle") return "999px"
-    if (normalized === "diecut") return "1rem"
-    if (normalized === "square") return "0.65rem"
-    return "0.75rem"
+    if (normalized === "diecut") return "0.5rem"
+    if (normalized === "square") return "0.25rem"
+    return "0.5rem"
   }, [stickerShape])
 
-  return (
-    <>
-      <Table.Row className="w-full" data-testid="product-row">
-        <Table.Cell className="!pl-0 p-4 w-24">
-          <div className="flex">
-            {designUrl ? (
-              <div className="relative group">
-                <div
-                  className="overflow-hidden bg-card cursor-pointer border border-ui-border-subtle"
-                  style={{
-                    width: 64,
-                    aspectRatio: stickerAspectRatio,
-                    borderRadius: stickerPreviewRadius,
-                  }}
-                  onClick={() => setIsLightboxOpen(true)}
-                >
-                  <img
-                    src={designUrl}
-                    alt="Custom sticker design"
-                    className="w-full h-full object-contain bg-neutral-950"
-                  />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <svg className="w-4 h-4 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-md overflow-hidden border border-ui-border-subtle bg-ui-bg-subtle">
-                <Thumbnail thumbnail={item.thumbnail} size="square" />
-              </div>
-            )}
-          </div>
-        </Table.Cell>
-  
-        <Table.Cell className="text-left align-top">
-          <Text
-            className="txt-medium-plus text-ui-fg-base"
-            data-testid="product-name"
+  const checkerboardStyle: CSSProperties = {
+    backgroundColor: "#111827",
+    backgroundImage:
+      "linear-gradient(45deg, #1f2937 25%, transparent 25%), linear-gradient(-45deg, #1f2937 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #1f2937 75%), linear-gradient(-45deg, transparent 75%, #1f2937 75%)",
+    backgroundSize: "12px 12px",
+    backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0",
+  }
+
+  const renderThumbnail = () => {
+    if (designUrl && isSticker) {
+      return (
+        <div 
+          className="relative cursor-pointer hover:scale-105 transition-transform duration-500 ease-out w-full h-full flex items-center justify-center"
+          onClick={() => setIsLightboxOpen(true)}
+        >
+          <div 
+            className="relative shadow-2xl shadow-black/50"
+            style={{
+              maxWidth: '80%',
+              maxHeight: '80%',
+              aspectRatio: stickerAspectRatio,
+              borderRadius: stickerPreviewRadius,
+            }}
           >
-            {item.title}
-          </Text>
-          {item.variant && (
-            <LineItemOptions variant={item.variant} data-testid="product-variant" />
-          )}
-          {designUrl && (
-            <div className="flex items-center gap-2 mt-2 text-[11px] uppercase tracking-wide text-ui-fg-muted">
-              <span className="rounded-full border border-primary/60 bg-primary/10 px-2 py-0.5 text-primary">
-                Custom design
+            <Image
+              src={designUrl}
+              alt="Custom sticker design"
+              width={250}
+              height={250}
+              className="w-full h-full object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]"
+              style={{ borderRadius: stickerPreviewRadius }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none rounded-[inherit]" />
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="w-full h-full overflow-hidden">
+        <Thumbnail
+          thumbnail={item.thumbnail}
+          images={item.variant?.product?.images}
+          size="square"
+          className="w-full h-full object-cover"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div 
+      className="group relative flex flex-col sm:flex-row gap-6 p-6 bg-zinc-900/50 border border-zinc-800 rounded-2xl mb-4 overflow-hidden" 
+      data-testid="product-row"
+    >
+      {/* Background Glow */}
+      <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/3 w-64 h-64 bg-indigo-500/5 blur-[100px] pointer-events-none" />
+      
+      {/* Visual Section */}
+      <div
+        className="relative shrink-0 w-full sm:w-56 aspect-square rounded-xl overflow-hidden border border-zinc-800/50 flex items-center justify-center p-4"
+        style={isSticker && designUrl ? { ...checkerboardStyle, isolation: "isolate" } : undefined}
+      >
+        {renderThumbnail()}
+        
+        {/* Hover overlay with zoom hint */}
+        {isSticker && designUrl && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" onClick={() => setIsLightboxOpen(true)}>
+            <div className="bg-black/50 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5">
+              <Scan className="w-3.5 h-3.5" />
+              Zoom
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info Section */}
+      <div className="flex-1 flex flex-col min-w-0 z-10">
+        <div className="flex justify-between items-start gap-4">
+          <div>
+            <h3 className="text-xl font-medium text-white tracking-tight mb-1">
+              {item.title}
+            </h3>
+            {!isSticker && (
+              <p className="text-sm text-zinc-500">{item.variant?.title}</p>
+            )}
+            <div className="flex items-center gap-2 text-sm text-zinc-400 mt-2">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+                Processed
               </span>
             </div>
-          )}
+          </div>
+          
+          <div className="text-right flex flex-col items-end">
+            <div className="text-xl font-semibold text-white tracking-tight">
+              <LineItemPrice item={item} style="tight" />
+            </div>
+            <div className="text-xs text-zinc-500 mt-1">
+              <LineItemUnitPrice item={item} style="tight" /> / unit
+            </div>
+          </div>
+        </div>
 
-          {stickerFacts.length > 0 && (
-            <dl className="mt-3 grid gap-1 text-xs text-ui-fg-muted">
-              {stickerFacts.map(({ label, value }) => (
-                <div key={label} className="flex gap-2">
-                  <dt className="font-medium text-ui-fg-subtle">{label}:</dt>
-                  <dd className="text-ui-fg-base">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </Table.Cell>
-  
-        <Table.Cell className="!pr-0">
-          <span className="!pr-0 flex flex-col items-end h-full justify-center">
-            <span className="flex gap-x-1 ">
-              <Text className="text-ui-fg-muted">
-                <span data-testid="product-quantity">{item.quantity}</span>x{" "}
-              </Text>
-              <LineItemUnitPrice item={item} style="tight" />
-            </span>
-  
-            <LineItemPrice item={item} style="tight" />
-          </span>
-        </Table.Cell>
-      </Table.Row>
+        {/* Tech Specs Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 my-6 py-5 border-y border-zinc-800/50 relative">
+          <SpecItem icon={Hash} label="Quantity" value={`${item.quantity} units`} />
+          <SpecItem icon={Scaling} label="Size" value={formatSizeDisplay()} />
+          <SpecItem icon={Layers} label="Material" value={formatToken(stickerMaterial)} />
+          <SpecItem icon={Scissors} label="Cut" value={formatToken(stickerFormat)} />
+          <SpecItem icon={Scan} label="Finish" value={formatToken(stickerPeeling)} />
+        </div>
+        
+        {/* Order Item Footer - could add status tracking here later */}
+        <div className="mt-auto flex items-center justify-between text-xs text-zinc-500">
+           <span>Product ID: {item.variant?.sku || item.variant?.id || 'N/A'}</span>
+        </div>
+      </div>
+
       {designUrl && (
         <Lightbox
           isOpen={isLightboxOpen}
@@ -214,7 +220,7 @@ const Item = ({ item }: ItemProps) => {
           alt="Custom sticker design"
         />
       )}
-    </>
+    </div>
   )
 }
 

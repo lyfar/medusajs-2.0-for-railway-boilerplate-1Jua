@@ -1,6 +1,5 @@
 "use client"
 
-import { Plus } from "@medusajs/icons"
 import { Button, Heading } from "@medusajs/ui"
 import { useEffect, useState } from "react"
 import { useFormState } from "react-dom"
@@ -12,6 +11,7 @@ import Modal from "@modules/common/components/modal"
 import { SubmitButton } from "@modules/checkout/components/submit-button"
 import { HttpTypes } from "@medusajs/types"
 import { addCustomerAddress } from "@lib/data/customer"
+import { Plus } from "lucide-react"
 
 const AddAddress = ({ region }: { region: HttpTypes.StoreRegion }) => {
   const [successState, setSuccessState] = useState(false)
@@ -43,12 +43,14 @@ const AddAddress = ({ region }: { region: HttpTypes.StoreRegion }) => {
   return (
     <>
       <button
-        className="border border-ui-border-base rounded-rounded p-5 min-h-[220px] h-full w-full flex flex-col justify-between"
+        className="group border border-zinc-800/50 border-dashed bg-zinc-900/20 hover:bg-zinc-900/40 hover:border-zinc-700 rounded-xl p-6 min-h-[220px] h-full w-full flex flex-col items-center justify-center gap-4 transition-all duration-300"
         onClick={open}
         data-testid="add-address-button"
       >
-        <span className="text-base-semi">New address</span>
-        <Plus />
+        <div className="w-12 h-12 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:scale-110 group-hover:bg-zinc-700 group-hover:text-white transition-all duration-300">
+          <Plus size={24} />
+        </div>
+        <span className="text-base font-medium text-zinc-400 group-hover:text-white transition-colors">Add new address</span>
       </button>
 
       <Modal isOpen={state} close={close} data-testid="add-address-modal">

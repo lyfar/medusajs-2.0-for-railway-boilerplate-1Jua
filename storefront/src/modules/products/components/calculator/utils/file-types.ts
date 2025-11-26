@@ -1,0 +1,15 @@
+export const ACCEPTED_FILE_TYPES: Record<string, string[]> = {
+  "image/png": [".png"],
+  "image/jpeg": [".jpg", ".jpeg"],
+  "image/webp": [".webp"],
+  "image/gif": [".gif"],
+  "image/tiff": [".tif", ".tiff"],
+  "image/heic": [".heic"],
+  "image/heif": [".heif"],
+  "image/bmp": [".bmp"],
+  "image/svg+xml": [".svg"],
+  "application/pdf": [".pdf"],
+  "image/vnd.adobe.photoshop": [".psd"],
+  "application/postscript": [".ai", ".eps"],
+  "application/illustrator": [".ai"],
+}

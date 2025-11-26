@@ -2,18 +2,27 @@
 
 import { Button } from "@medusajs/ui"
 import clsx from "clsx"
-import { Popover, Transition } from "@headlessui/react"
+import { Transition } from "@headlessui/react"
 import { useParams } from "next/navigation"
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CheckCircle2 } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { 
+  Shapes, 
+  Layers, 
+  Ruler, 
+  Package, 
+  Scroll, 
+  ScanLine,
+  ChevronRight,
+  Check,
+  Save
+} from "lucide-react"
 
 import { addStickerToCart } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
 import { Shape } from "../calculator/shape-selector"
 import { useShapeStickerPricing } from "@lib/hooks/use-shape-sticker-pricing"
-import { DesignDraftState, createFileFromStoredAsset, getDesignFilesFromState } from "../calculator/utils/design-storage"
+import { DesignDraftState, getDesignFilesFromState } from "../calculator/utils/design-storage"
 import { Dimensions, Material, Format, Peeling } from "../calculator/types"
-import MobileControlRail from "../calculator/mobile-control-rail"
 import { getPresignedUploadUrl, uploadFileToPresignedUrl } from "@lib/data/uploads"
 import ImageDropZone, {
   ImageDropZoneHandle,
@@ -182,6 +191,17 @@ const defaultDimensions: Record<Shape, Dimensions> = {
   diecut: { width: 10, height: 6 },
 }
 
+type Step = 'shape' | 'material' | 'size' | 'quantity' | 'format' | 'peeling'
+
+const STEPS: { id: Step; label: string; icon: React.ElementType }[] = [
+  { id: 'shape', label: 'Shape', icon: Shapes },
+  { id: 'material', label: 'Material', icon: Layers },
+  { id: 'size', label: 'Size', icon: Ruler },
+  { id: 'quantity', label: 'Quantity', icon: Package },
+  { id: 'format', label: 'Format', icon: Scroll },
+  { id: 'peeling', label: 'Peeling', icon: ScanLine },
+]
+
 export default function ProductActionsSticker({
   product,
   region: _region,
@@ -205,6 +225,8 @@ export default function ProductActionsSticker({
     hasUnsavedChanges: false,
   })
   const [designError, setDesignError] = useState<string | null>(null)
+  const [activeStep, setActiveStep] = useState<Step>('shape')
+  
   const countryCode = useParams().countryCode as string
   void _region
 
@@ -269,38 +291,20 @@ export default function ProductActionsSticker({
 
   const canAdjustOrientation = supportsOrientation(shape, dimensions)
 
-  const formattedShape = useMemo(() => {
-    return shape.charAt(0).toUpperCase() + shape.slice(1)
-  }, [shape])
-
-  const formattedSize = useMemo(() => {
-    if (dimensions.diameter) {
-      return `${dimensions.diameter} cm`
-    }
-    if (dimensions.width && dimensions.height) {
-      return `${dimensions.width} × ${dimensions.height} cm`
-    }
-    return null
-  }, [dimensions.diameter, dimensions.width, dimensions.height])
-
-  const formattedOrientation = useMemo(() => {
-    if (!orientation) return null
-    return orientation.charAt(0).toUpperCase() + orientation.slice(1)
-  }, [orientation])
-
   const isSavingDesign = imageDropZoneRef.current?.isSavingDesign
 
   // Standard CTA disabled state (logic for desktop and base constraints)
-  // Note: For mobile, we might allow clicking even if !designReady to show a toast
   const isCtaDisabled = useMemo(() => {
     if (!selectedVariant || !inStock || !!disabled || isAdding || isSavingDesign) {
       return true
     }
+    if (!designLockedIn && editorState.hasImage) {
+       return true
+    }
     return false
-  }, [selectedVariant, inStock, disabled, isAdding, isSavingDesign])
+  }, [selectedVariant, inStock, disabled, isAdding, isSavingDesign, designLockedIn, editorState.hasImage])
 
-  // Mobile click disabled state: same as above, but we DON'T disable for !designReady
-  // so we can capture the click and show a message
+  // Mobile click disabled state
   const isMobileCtaDisabled = useMemo(() => {
     return isCtaDisabled // Base constraints
   }, [isCtaDisabled])
@@ -321,46 +325,68 @@ export default function ProductActionsSticker({
 
   const mobileCtaLabel = useMemo(() => {
     if (lastPricing) {
-      return `Add to cart • $${lastPricing.totalPrice.toFixed(2)}`
+      return `Add • $${lastPricing.totalPrice.toFixed(2)}`
     }
-    return primaryCtaLabel
-  }, [lastPricing, primaryCtaLabel])
+    return "Add to cart"
+  }, [lastPricing])
 
   const desktopInlineStatus = useMemo(() => {
     if (designError) {
       return { text: designError, className: "text-ui-fg-error" }
     }
-    if (!designReady) {
-      return { text: "Save your design first", className: "text-amber-200" }
-    }
-    if (editorState.hasUnsavedChanges) {
-      return { text: "Save edits to unlock", className: "text-amber-200" }
-    }
     return null
-  }, [designError, designReady, editorState.hasUnsavedChanges])
+  }, [designError])
 
-  const desktopCtaClasses = useMemo(
+  const ctaClasses = useMemo(
     () =>
       clsx(
         "h-12 px-6 min-w-[240px] max-w-[320px] w-auto flex-shrink-0 self-center rounded-rounded text-sm font-semibold sm:h-14 sm:text-base transition-colors",
         isCtaDisabled
-          ? "bg-neutral-800 text-neutral-500 border border-neutral-700"
+          ? !designLockedIn && editorState.hasImage
+            ? "bg-neutral-900 text-white border border-neutral-800 cursor-not-allowed" // Dimmed state for unsaved changes, price visible
+            : "bg-neutral-800 text-neutral-500 border border-neutral-700" // Standard disabled state
           : "bg-emerald-500 text-white hover:bg-emerald-400 border border-emerald-500 shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
       ),
-    [isCtaDisabled]
+    [isCtaDisabled, designLockedIn, editorState.hasImage]
   )
 
-  const mobileCtaClasses = useMemo(
-    () =>
-      clsx(
-        "h-14 flex-1 text-base font-semibold transition-all rounded-2xl active:scale-98",
-        !isMobileCtaDisabled
-          ? designLockedIn
-            ? "!bg-emerald-500 hover:!bg-emerald-400 focus-visible:!ring-emerald-500 text-white shadow-lg"
-            : "!bg-emerald-500/40 text-white/70 shadow-none ring-1 ring-emerald-400/40" // Dimmed state
-          : ""
-      ),
-    [designLockedIn, isMobileCtaDisabled]
+  const SaveDesignButton = () => {
+    if (!editorState.hasImage || !editorState.hasUnsavedChanges) return null
+
+    return (
+      <Button
+        onClick={handleSaveDesign}
+        disabled={isSavingDesign}
+        className="h-12 w-12 rounded-full p-0 flex items-center justify-center bg-neutral-800 text-white border border-neutral-700 shadow-lg active:scale-95 transition-all hover:bg-neutral-700 flex-shrink-0"
+        variant="secondary"
+      >
+        {isSavingDesign ? (
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+        ) : (
+          <Save className="w-5 h-5" />
+        )}
+      </Button>
+    )
+  }
+
+  const AddToCartButton = () => (
+    <Button
+      onClick={handleButtonClick}
+      disabled={isCtaDisabled}
+      variant="primary"
+      className={ctaClasses}
+      isLoading={isAdding || isSavingDesign}
+      data-testid="add-product-button"
+    >
+      <div className="flex w-full flex-col items-center text-center leading-tight">
+        <span className="text-sm font-semibold sm:text-base">{desktopCtaLabel}</span>
+        {desktopInlineStatus && (
+          <span className={clsx("text-[11px] font-medium", desktopInlineStatus.className)}>
+            {desktopInlineStatus.text}
+          </span>
+        )}
+      </div>
+    </Button>
   )
 
   const uploadDesignAssets = useCallback(async (draft: DesignDraftState) => {
@@ -471,6 +497,12 @@ export default function ProductActionsSticker({
     handleOrientationChange(nextOrientation)
   }, [canAdjustOrientation, orientation, handleOrientationChange])
 
+  const handleSaveDesign = async () => {
+    if (imageDropZoneRef.current) {
+      await imageDropZoneRef.current.saveDesign()
+    }
+  }
+
   const handleButtonClick = async () => {
     if (!designLockedIn) {
       const message = designReady
@@ -520,6 +552,7 @@ export default function ProductActionsSticker({
           material,
           format,
           peeling,
+          orientation,
           transformations: designDraft.lastTransformations ?? designDraft.transformations,
           pricing: {
             unitPrice: pricingForCart.unitPrice,
@@ -540,14 +573,21 @@ export default function ProductActionsSticker({
     }
   }
 
+  const handleMobileStepChange = (step: Step) => {
+    setActiveStep(step)
+  }
+
   return (
     <div
-      className="relative w-full bg-ui-bg-base pb-24 sm:pb-28 lg:pb-0 lg:min-h-[calc(100vh-4rem)] lg:max-h-[calc(100vh-4rem)] lg:overflow-hidden"
+      className="lg:relative lg:w-full lg:bg-ui-bg-base lg:h-auto lg:overflow-visible lg:min-h-0 fixed inset-0 z-[40] bg-[#14161b] overflow-hidden pt-[var(--header-height,64px)] lg:pt-0"
       ref={actionsRef}
     >
-      <div className="flex min-h-screen flex-col lg:h-[calc(100vh-4rem)] lg:flex-row">
+      <div className="flex flex-col h-full lg:min-h-screen lg:h-[calc(100vh-4rem)] lg:flex-row">
+        
+        {/* Canvas Section */}
+        {/* Mobile: Flex-1 to take available space, sticky top behavior is implicit in flex col */}
         <div
-          className="relative flex flex-1 min-h-[60vh] lg:min-h-[calc(100vh-4rem)] lg:h-full lg:w-2/3 lg:border-r lg:border-ui-border-subtle lg:overflow-y-auto"
+          className="relative flex-1 w-full lg:min-h-[calc(100vh-4rem)] lg:h-full lg:w-2/3 lg:border-r lg:border-ui-border-subtle lg:overflow-y-auto transition-all duration-300"
           style={{
             backgroundColor: "#14161b",
             backgroundImage: backgroundPattern ? `url("${backgroundPattern}")` : "none",
@@ -556,8 +596,8 @@ export default function ProductActionsSticker({
             backgroundPosition: backgroundPattern ? "center" : undefined,
           }}
         >
-          <div className="relative flex h-full w-full flex-col p-4 pb-12 sm:p-6 sm:pb-20 lg:min-h-0 lg:p-8 lg:pb-12">
-            <div className="flex-1">
+          <div className="absolute inset-0 flex flex-col p-4 pb-32 sm:p-6 sm:pb-20 lg:static lg:h-full lg:p-8 lg:pb-12 justify-center">
+            <div className="flex-1 min-h-0 flex flex-col justify-center lg:h-full lg:w-full">
               <ImageDropZone
                 ref={imageDropZoneRef}
                 shape={shape}
@@ -574,120 +614,138 @@ export default function ProductActionsSticker({
           </div>
         </div>
 
-        <div className="flex w-full flex-col border-t border-ui-border-subtle bg-ui-bg-base lg:sticky lg:top-0 lg:h-full lg:w-1/3 lg:border-l lg:border-t-0 lg:border-ui-border-subtle lg:bg-transparent">
-          <div className="flex-1 overflow-y-auto p-4 pt-4 pb-36 sm:p-6 sm:pt-8 sm:pb-48 lg:p-8 lg:pb-12">
+        {/* Mobile Controls Area - Fixed Height Bottom Sheet */}
+        <div className="flex flex-col bg-[#09090b] border-t border-white/10 lg:hidden z-50 pb-[env(safe-area-inset-bottom)] shrink-0">
+          {/* Tab Bar */}
+          <div className="flex items-center w-full border-b border-white/5">
+            {STEPS.map((step) => {
+              const Icon = step.icon
+              const isActive = activeStep === step.id
+              
+              return (
+                <button
+                  key={step.id}
+                  onClick={() => setActiveStep(step.id)}
+                  className={clsx(
+                    "flex-1 flex flex-col items-center justify-center gap-1 py-3 relative min-w-0",
+                    isActive ? "text-white" : "text-zinc-500"
+                  )}
+                >
+                  <Icon className={clsx("w-5 h-5", isActive ? "text-white" : "text-current")} />
+                  <span className="text-[10px] font-medium capitalize truncate w-full px-1">{step.label}</span>
+                  {isActive && (
+                    <div className="absolute bottom-0 w-full h-0.5 bg-white/20">
+                      <div className="mx-auto w-8 h-full bg-white rounded-full" />
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Active Step Content */}
+          <div className="h-[220px] relative bg-zinc-950/50 overflow-hidden">
+            {STEPS.map((step) => (
+              <Transition
+                key={step.id}
+                show={activeStep === step.id}
+                enter="transition ease-out duration-300 transform"
+                enterFrom="opacity-0 translate-y-4 scale-95"
+                enterTo="opacity-100 translate-y-0 scale-100"
+                leave="transition ease-in duration-200 transform"
+                leaveFrom="opacity-100 translate-y-0 scale-100"
+                leaveTo="opacity-0 -translate-y-4 scale-95"
+                className="absolute inset-0 p-4 overflow-y-auto w-full h-full bg-[#09090b]"
+              >
+                <div className="space-y-3 min-h-full pb-4">
+                  <h3 className="text-xs font-medium text-zinc-400 uppercase tracking-wider">
+                    Select {step.label}
+                  </h3>
+                  {step.id === 'shape' && (
+                    <ShapeSelector selectedShape={shape} onShapeChange={setShape} />
+                  )}
+                  {step.id === 'material' && (
+                    <MaterialSelector selectedMaterial={material} onMaterialChange={setMaterial} />
+                  )}
+                  {step.id === 'size' && (
+                    <SizeInput shape={shape} dimensions={dimensions} onSizeChange={handleDimensionsChange} />
+                  )}
+                  {step.id === 'quantity' && (
+                    <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
+                  )}
+                  {step.id === 'format' && (
+                    <FormatSelector selectedFormat={format} onFormatChange={setFormat} />
+                  )}
+                  {step.id === 'peeling' && (
+                    <PeelingSelector selectedPeeling={peeling} onPeelingChange={setPeeling} />
+                  )}
+                </div>
+              </Transition>
+            ))}
+          </div>
+
+          {/* Mobile Action Bar */}
+          <div className="p-3 border-t border-white/10 bg-[#09090b] flex flex-col gap-2">
+            {designError && (
+              <div className="text-[11px] font-medium text-red-400 px-2 leading-tight text-center">
+                {designError}
+              </div>
+            )}
+            <div className="flex justify-center items-center gap-3">
+              <SaveDesignButton />
+              <AddToCartButton />
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Controls (Sidebar) - Hidden on Mobile */}
+        <div className="hidden lg:flex w-full flex-col border-t border-ui-border-subtle bg-ui-bg-base lg:sticky lg:top-0 lg:h-full lg:w-1/3 lg:border-l lg:border-t-0 lg:border-ui-border-subtle lg:bg-transparent z-20 relative">
+          <div className="flex-1 overflow-y-auto p-4 pt-6 pb-32 sm:p-6 sm:pt-8 sm:pb-48 lg:p-8 lg:pb-12">
             <div className="space-y-8">
-              <section id="shape" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Shape</h3>
+              <section id="shape" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Shape</h3>
                 <ShapeSelector selectedShape={shape} onShapeChange={setShape} />
               </section>
 
-              <section id="material" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Material / effects</h3>
+              <section id="material" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Material / effects</h3>
                 <MaterialSelector selectedMaterial={material} onMaterialChange={setMaterial} />
               </section>
 
-              <section id="size" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Size</h3>
+              <section id="size" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Size</h3>
                 <SizeInput shape={shape} dimensions={dimensions} onSizeChange={handleDimensionsChange} />
               </section>
 
-              <section id="quantity" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Quantity</h3>
+              <section id="quantity" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Quantity</h3>
                 <QuantitySelector quantity={quantity} onQuantityChange={setQuantity} />
               </section>
 
-              <section id="format" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Format</h3>
+              <section id="format" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Format</h3>
                 <FormatSelector selectedFormat={format} onFormatChange={setFormat} />
               </section>
 
-              <section id="peeling" className="hidden space-y-4 scroll-mt-24 sm:block">
-                <h3 className="text-sm font-medium text-ui-fg-muted">Peeling option</h3>
+              <section id="peeling" className="space-y-4 scroll-mt-24 block">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ui-fg-muted">Peeling option</h3>
                 <PeelingSelector selectedPeeling={peeling} onPeelingChange={setPeeling} />
               </section>
             </div>
           </div>
 
+          {/* Footer Desktop */}
           <div className="lg:sticky lg:bottom-0 lg:left-0 lg:right-0 lg:border-0 lg:bg-transparent lg:p-0">
-            <div className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-3 sm:sticky sm:bottom-0 sm:left-0 sm:right-0 sm:z-40 sm:border-0 sm:bg-transparent sm:px-4 sm:py-4 sm:shadow-none lg:static lg:z-auto lg:px-0 lg:py-4 lg:shadow-none">
-              {/* Desktop layout */}
-              <div className="hidden w-full flex-col items-center gap-2 sm:flex">
-                <Button
-                  onClick={handleButtonClick}
-                  disabled={isCtaDisabled}
-                  variant="primary"
-                  className={desktopCtaClasses}
-                  isLoading={isAdding || isSavingDesign}
-                  data-testid="add-product-button"
-                >
-                  <div className="flex w-full flex-col items-center text-center leading-tight">
-                    <span className="text-sm font-semibold sm:text-base">{desktopCtaLabel}</span>
-                    {desktopInlineStatus && (
-                      <span className={clsx("text-[11px] font-medium", desktopInlineStatus.className)}>
-                        {desktopInlineStatus.text}
-                      </span>
-                    )}
-                  </div>
-                </Button>
-              </div>
-
-              {/* Mobile compact summary */}
-              <div className="relative flex flex-col gap-3 sm:hidden">
-                <div className="rounded-3xl px-4">
-                  <MobileControlRail
-                    shape={shape}
-                    dimensions={dimensions}
-                    quantity={quantity}
-                    material={material}
-                    format={format}
-                    peeling={peeling}
-                    onShapeChange={setShape}
-                    onSizeChange={handleDimensionsChange}
-                    onQuantityChange={setQuantity}
-                    onMaterialChange={setMaterial}
-                    onFormatChange={setFormat}
-                    onPeelingChange={setPeeling}
-                    orientation={orientation}
-                    onOrientationToggle={canAdjustOrientation ? handleOrientationToggle : undefined}
-                    canAdjustOrientation={canAdjustOrientation}
-                  />
-                  <div className="mt-3 flex flex-col gap-2">
-                    <div className="flex items-center">
-                    <Button
-                      onClick={handleButtonClick}
-                      disabled={isMobileCtaDisabled}
-                      variant="primary"
-                      className={mobileCtaClasses}
-                      isLoading={isAdding || isSavingDesign}
-                      data-testid="mobile-add-product-button"
-                    >
-                      {mobileCtaLabel}
-                    </Button>
-                    </div>
-                  </div>
-                  {!designLockedIn && (
-                    <p className="text-center text-[11px] font-medium text-amber-200">
-                      Save your design inside the canvas to enable checkout.
-                    </p>
-                  )}
-                  {!designDraft?.original && (
-                    <p className="text-center text-[11px] font-medium text-indigo-200">
-                      Upload artwork above to activate all controls.
-                    </p>
-                  )}
+            <div className="fixed bottom-0 left-0 right-0 z-50 px-3 pb-4 pt-3 border-t border-white/10 bg-black/80 backdrop-blur-xl sm:sticky sm:bottom-0 sm:left-0 sm:right-0 sm:z-40 sm:border-0 sm:bg-transparent sm:px-4 sm:py-4 sm:shadow-none lg:static lg:z-auto lg:px-0 lg:py-4 lg:shadow-none">
+              <div className="flex w-full flex-col items-center gap-2">
+                <div className="flex w-full items-center justify-center gap-3">
+                  <SaveDesignButton />
+                  <AddToCartButton />
                 </div>
-                {designError && (
-                  <div className="flex items-center gap-1.5 text-xs text-ui-fg-error">
-                    <div className="h-1 w-1 flex-shrink-0 rounded-full bg-ui-fg-error"></div>
-                    <span className="line-clamp-1">{designError}</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>
         </div>
-        <div className="h-[130px] sm:hidden" aria-hidden="true" />
       </div>
     </div>
   )

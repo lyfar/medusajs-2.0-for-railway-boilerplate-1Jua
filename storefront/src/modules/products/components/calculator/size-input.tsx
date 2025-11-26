@@ -164,7 +164,7 @@ export default function SizeInput({ shape, dimensions, onSizeChange }: SizeInput
 
   return (
     <div className="space-y-4">
-      <div className="grid auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid auto-rows-fr grid-cols-3 gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {(['S', 'M', 'L', 'XL', 'Custom'] as SizeOption[]).map((size) => {
           const isSelected = selectedSize === size
 

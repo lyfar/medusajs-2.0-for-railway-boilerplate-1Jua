@@ -141,6 +141,7 @@ export default function Calculator({ onStateChange, disabled }: CalculatorProps)
         onQuantityChange={handleQuantityChange}
         onOrientationToggle={orientationEnabled ? handleOrientationToggle : undefined}
         canAdjustOrientation={orientationEnabled}
+        material={material}
       />
 
       <div className="hidden flex-col space-y-6 md:flex">

@@ -4,12 +4,13 @@ import { Button } from "@medusajs/ui"
 import { OnApproveActions, OnApproveData } from "@paypal/paypal-js"
 import { PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js"
 import { useElements, useStripe } from "@stripe/react-stripe-js"
-import React, { useState } from "react"
+import React, { useState, useContext } from "react"
 import ErrorMessage from "../error-message"
 import Spinner from "@modules/common/icons/spinner"
 import { placeOrder } from "@lib/data/cart"
 import { HttpTypes } from "@medusajs/types"
 import { isManual, isPaypal, isStripe } from "@lib/constants"
+import { StripeContext } from "@modules/checkout/components/payment-wrapper"
 
 type PaymentButtonProps = {
   cart: HttpTypes.StoreCart
@@ -26,14 +27,6 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
     !cart.billing_address ||
     !cart.email ||
     (cart.shipping_methods?.length ?? 0) < 1
-
-  // TODO: Add this once gift cards are implemented
-  // const paidByGiftcard =
-  //   cart?.gift_cards && cart?.gift_cards?.length > 0 && cart?.total === 0
-
-  // if (paidByGiftcard) {
-  //   return <GiftCardPaymentButton />
-  // }
 
   const paymentSession = cart.payment_collection?.payment_sessions?.[0]
 
@@ -63,25 +56,6 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   }
 }
 
-const GiftCardPaymentButton = () => {
-  const [submitting, setSubmitting] = useState(false)
-
-  const handleOrder = async () => {
-    setSubmitting(true)
-    await placeOrder()
-  }
-
-  return (
-    <Button
-      onClick={handleOrder}
-      isLoading={submitting}
-      data-testid="submit-order-button"
-    >
-      Place order
-    </Button>
-  )
-}
-
 const StripePaymentButton = ({
   cart,
   notReady,
@@ -93,7 +67,45 @@ const StripePaymentButton = ({
 }) => {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  
+  // Check if we are inside Stripe Elements context
+  const isStripeContext = useContext(StripeContext)
 
+  // If not in Stripe context (e.g. payment session not initialized yet),
+  // don't try to call useStripe() as it will throw
+  if (!isStripeContext) {
+    return (
+      <Button
+        disabled={true}
+        size="large"
+        data-testid={dataTestId}
+      >
+        Place order
+      </Button>
+    )
+  }
+
+  return <StripeButtonContent 
+    cart={cart} 
+    notReady={notReady} 
+    dataTestId={dataTestId} 
+    submitting={submitting}
+    setSubmitting={setSubmitting}
+    errorMessage={errorMessage}
+    setErrorMessage={setErrorMessage}
+  />
+}
+
+// Separate component to safely use Stripe hooks
+const StripeButtonContent = ({ 
+  cart, 
+  notReady, 
+  dataTestId,
+  submitting,
+  setSubmitting,
+  errorMessage,
+  setErrorMessage
+}: any) => {
   const onPaymentCompleted = async () => {
     await placeOrder()
       .catch((err) => {
@@ -109,7 +121,7 @@ const StripePaymentButton = ({
   const card = elements?.getElement("card")
 
   const session = cart.payment_collection?.payment_sessions?.find(
-    (s) => s.status === "pending"
+    (s: any) => s.status === "pending"
   )
 
   const disabled = !stripe || !elements ? true : false

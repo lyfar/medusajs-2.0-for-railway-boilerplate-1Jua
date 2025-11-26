@@ -1,6 +1,6 @@
 import ImageDropZone, { type AutoConfigureSuggestion } from "../image-drop-zone"
 import { Shape } from "../shape-selector"
-import { Dimensions } from "../types"
+import { Dimensions, type Material } from "../types"
 import { DesignDraftState } from "../utils/design-storage"
 import StepCard from "./step-card"
 import type { Orientation } from "../orientation"
@@ -20,6 +20,7 @@ interface DesignUploadSectionProps {
   onQuantityChange?: (quantity: number) => void
   onOrientationToggle?: () => void
   canAdjustOrientation?: boolean
+  material?: Material
 }
 
 export default function DesignUploadSection({
@@ -36,6 +37,7 @@ export default function DesignUploadSection({
   onQuantityChange,
   onOrientationToggle,
   canAdjustOrientation,
+  material,
 }: DesignUploadSectionProps) {
   return (
     <StepCard
@@ -55,6 +57,7 @@ export default function DesignUploadSection({
         onOrientationChange={onOrientationChange}
         disabled={disabled}
         compact={false}
+        material={material}
       />
       {typeof quantity === "number" &&
         onShapeChange &&
