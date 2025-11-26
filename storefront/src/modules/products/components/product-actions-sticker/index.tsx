@@ -298,6 +298,9 @@ export default function ProductActionsSticker({
     if (!selectedVariant || !inStock || !!disabled || isAdding || isSavingDesign) {
       return true
     }
+    if (!editorState.hasImage) {
+      return false // Enabled to allow upload trigger
+    }
     if (!designLockedIn && editorState.hasImage) {
        return true
     }
@@ -313,22 +316,29 @@ export default function ProductActionsSticker({
     if (!selectedVariant) return "Select variant"
     if (!inStock) return "Out of stock"
     if (isSavingDesign) return "Saving design..."
+    if (!editorState.hasImage) return "Upload your design"
     return "Add to cart"
-  }, [selectedVariant, inStock, isSavingDesign])
+  }, [selectedVariant, inStock, isSavingDesign, editorState.hasImage])
 
   const desktopCtaLabel = useMemo(() => {
+    if (!editorState.hasImage) {
+      return "Upload your design"
+    }
     if (lastPricing) {
       return `Add to cart • $${lastPricing.totalPrice.toFixed(2)}`
     }
     return "Add to cart"
-  }, [lastPricing])
+  }, [lastPricing, editorState.hasImage])
 
   const mobileCtaLabel = useMemo(() => {
+    if (!editorState.hasImage) {
+      return "Upload your design"
+    }
     if (lastPricing) {
       return `Add • $${lastPricing.totalPrice.toFixed(2)}`
     }
     return "Add to cart"
-  }, [lastPricing])
+  }, [lastPricing, editorState.hasImage])
 
   const desktopInlineStatus = useMemo(() => {
     if (designError) {
@@ -504,6 +514,11 @@ export default function ProductActionsSticker({
   }
 
   const handleButtonClick = async () => {
+    if (!editorState.hasImage) {
+      imageDropZoneRef.current?.openFileDialog()
+      return
+    }
+
     if (!designLockedIn) {
       const message = designReady
         ? "Save your latest edits before adding to cart."

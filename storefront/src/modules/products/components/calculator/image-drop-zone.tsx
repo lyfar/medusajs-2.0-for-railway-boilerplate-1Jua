@@ -62,6 +62,7 @@ export interface ImageDropZoneHandle {
   handleScaleChange: (delta: number) => void
   handleRotationChange: (delta: number) => void
   handleReset: () => void
+  openFileDialog: () => void
 }
 
 type UploadPreviewKind = StoredUploadPreviewKind
@@ -547,7 +548,8 @@ const ImageDropZone = forwardRef<ImageDropZoneHandle, ImageDropZoneProps>(functi
     handleScaleChange,
     handleRotationChange,
     handleReset,
-  }), [handleSaveEditedDesign, isSavingDesign, handleScaleChange, handleRotationChange, handleReset])
+    openFileDialog: open,
+  }), [handleSaveEditedDesign, isSavingDesign, handleScaleChange, handleRotationChange, handleReset, open])
 
   useEffect(() => {
     if (!imageData) {
